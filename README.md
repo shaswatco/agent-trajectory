@@ -20,7 +20,7 @@ ctx ███░░░░░░░░░░░░░░░░░░░░░░�
 ## Install
 
 ```bash
-npm install -g agent-trajectory
+npm install -g github:shaswatco/agent-trajectory
 ```
 
 Then, from anywhere:
@@ -34,8 +34,11 @@ No configuration, no API keys, no setup. It finds your agents' session stores au
 Try it without installing:
 
 ```bash
-npx agent-trajectory
+npx github:shaswatco/agent-trajectory
 ```
+
+> Not on the npm registry yet, so install from GitHub for now. Once published,
+> `npm install -g agent-trajectory` will work the same way.
 
 ## What it shows
 

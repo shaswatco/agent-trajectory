@@ -30,6 +30,7 @@
     "build": "tsc",
     "dev": "node --experimental-strip-types src/cli.tsx",
     "start": "node dist/cli.js",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
