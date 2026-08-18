@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="639" height="374" viewBox="0 0 639 374">
+<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:13px}</style>
+<rect width="639" height="374" rx="10" fill="#0d1117"/>
+<path d="M0 10a10 10 0 0 1 10-10h619a10 10 0 0 1 10 10v24H0z" fill="#161b22"/>
+<circle cx="20" cy="17" r="6" fill="#ff5f56"/>
+<circle cx="40" cy="17" r="6" fill="#ffbd2e"/>
+<circle cx="60" cy="17" r="6" fill="#27c93f"/>
+<text x="88" y="22" fill="#6e7681">atrajectory — q quit · s sessions · u unified</text>
+<text x="18" y="60" xml:space="preserve"><tspan fill="#bc8cff">agent trajectory</tspan><tspan fill="#8b949e">  ·  claude 278 · codex 2 · dsh 11 · hermes 186</tspan></text>
+<text x="18" y="82" xml:space="preserve"><tspan fill="#8b949e">turns 69 · steps 550 · LLM 31.2s · TTFT 4.8s · 13.3 tok/s · cache 33%</tspan></text>
+<text x="18" y="104" xml:space="preserve"><tspan fill="#8b949e">ctx </tspan><tspan fill="#3fb950">████████</tspan><tspan fill="#6e7681">████████████████████████████████</tspan><tspan fill="#8b949e">  21% · 38.9K/180.0K</tspan></text>
+<text x="18" y="126" xml:space="preserve"><tspan fill="#8b949e"> </tspan></text>
+<text x="18" y="148" xml:space="preserve"><tspan fill="#6e7681">#1   </tspan><tspan fill="#bc8cff">claude </tspan><tspan fill="#39c5cf">› user         </tspan><tspan fill="#39c5cf">add a retry around the fetch call</tspan></text>
+<text x="18" y="170" xml:space="preserve"><tspan fill="#6e7681">#2   </tspan><tspan fill="#bc8cff">claude </tspan><tspan fill="#6e7681">⋯ system       </tspan><tspan fill="#6e7681">&lt;workspace instructions&gt; AGENTS.md…</tspan></text>
+<text x="18" y="192" xml:space="preserve"><tspan fill="#6e7681">#3   </tspan><tspan fill="#bc8cff">claude </tspan><tspan fill="#e6edf3">✎ assistant    </tspan><tspan fill="#e6edf3">I'll add a bounded retry with backoff.</tspan></text>
+<text x="18" y="214" xml:space="preserve"><tspan fill="#6e7681">#4   </tspan><tspan fill="#bc8cff">claude </tspan><tspan fill="#d29922">⚙ Read         </tspan><tspan fill="#d29922">file_path=src/client.ts limit=80</tspan><tspan fill="#6e7681">     0.2s</tspan></text>
+<text x="18" y="236" xml:space="preserve"><tspan fill="#6e7681">#5   </tspan><tspan fill="#bc8cff">claude </tspan><tspan fill="#d29922">⚙ Edit         </tspan><tspan fill="#d29922">file_path=src/client.ts</tspan><tspan fill="#6e7681">              0.4s</tspan></text>
+<text x="18" y="258" xml:space="preserve"><tspan fill="#6e7681">#6   </tspan><tspan fill="#3fb950">codex  </tspan><tspan fill="#39c5cf">› user         </tspan><tspan fill="#39c5cf">now run the test suite</tspan></text>
+<text x="18" y="280" xml:space="preserve"><tspan fill="#6e7681">#7   </tspan><tspan fill="#3fb950">codex  </tspan><tspan fill="#d29922">⚙ exec         </tspan><tspan fill="#d29922">cargo test --all</tspan><tspan fill="#6e7681">                     8.1s</tspan></text>
+<text x="18" y="302" xml:space="preserve"><tspan fill="#6e7681">#8   </tspan><tspan fill="#58a6ff">dsh    </tspan><tspan fill="#d29922">⚙ read         </tspan><tspan fill="#d29922">file_path=packages/llm/config.ts</tspan><tspan fill="#6e7681">     0.2s</tspan></text>
+<text x="18" y="324" xml:space="preserve"><tspan fill="#6e7681">#9   </tspan><tspan fill="#58a6ff">dsh    </tspan><tspan fill="#f85149">✖ turn         </tspan><tspan fill="#f85149">RATE_LIMIT: 429 free tier exceeded</tspan></text>
+<text x="18" y="346" xml:space="preserve"><tspan fill="#6e7681">#10  </tspan><tspan fill="#39c5cf">hermes </tspan><tspan fill="#e6edf3">✎ assistant    </tspan><tspan fill="#e6edf3">All 42 tests pass. Ready to commit.</tspan></text>
+</svg>
