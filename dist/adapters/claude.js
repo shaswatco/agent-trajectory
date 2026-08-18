@@ -76,10 +76,17 @@ function foldTranscript(records) {
             continue;
         }
         if (type === 'assistant' && message !== undefined) {
-            steps += 1;
             const declared = message['model'];
-            if (typeof declared === 'string' && isRealModel(declared))
+            // Claude Code writes its own notices — expired auth, request failures —
+            // as assistant records stamped `<synthetic>` with zero output tokens.
+            // They are the harness speaking, not the model: counting them as steps
+            // inflates the step count, and rendering them as assistant text makes a
+            // failed request read like something Claude said.
+            const synthetic = typeof declared === 'string' && !isRealModel(declared);
+            if (typeof declared === 'string' && !synthetic)
                 model = declared;
+            if (!synthetic)
+                steps += 1;
             const usage = usageOf(message);
             if (usage !== undefined) {
                 input += usage.input;
@@ -110,8 +117,11 @@ function foldTranscript(records) {
                 }
             }
             const text = texts.join(' ').replace(/\s+/g, ' ').trim();
-            if (text.length > 0)
-                push({ kind: 'assistant', label: 'assistant', text, time });
+            if (text.length > 0) {
+                push(synthetic
+                    ? { kind: 'error', label: 'client', text, time }
+                    : { kind: 'assistant', label: 'assistant', text, time });
+            }
             continue;
         }
         if (type === 'system') {

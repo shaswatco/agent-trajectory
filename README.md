@@ -164,7 +164,11 @@ Each feed row is one event:
 | `⋯` | injected context — instruction files, system prompts, tool results |
 | `✎` | model response |
 | `⚙` | tool call, with an argument preview and duration |
-| `✖` | a failure — a tool error, or a turn that ended aborted or errored |
+| `✖` | a failure — a tool error, an aborted turn, or a client notice such as expired auth |
+
+Rows labelled `client` are the agent's own notices, not model output. Claude
+Code records these as assistant messages stamped `<synthetic>` with zero
+tokens; they are shown as failures and excluded from the step count.
 
 The `›` versus `⋯` split is the one worth internalising: it separates what you asked for from the tens of thousands of tokens of context the agent injects around it.
 
