@@ -24,12 +24,14 @@ Options
   --cwd [dir]        only sessions recorded under dir (bare flag means $PWD)
   --session <path>   pin one session instead of the unified feed
   --merge <n>        sessions merged into the unified feed, default 6
+  --history <n>      rows kept for scrollback, default 5000
   --interval <ms>    poll interval, default 1000
   -h, --help         show this help
   -v, --version      show the version
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
+  ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume following)
 
 Costs need a price table; free-tier models are recognised automatically and
 everything else shows $— until you write one. See the README.
@@ -57,6 +59,7 @@ export function parseOptions(argv) {
     let harnesses = HARNESS_IDS;
     let cwd;
     let mergeLimit = 6;
+    let historyLimit = 5000;
     let verbose = false;
     let pricingFile;
     for (let index = 0; index < argv.length; index += 1) {
@@ -79,6 +82,10 @@ export function parseOptions(argv) {
             mergeLimit = Number.parseInt(next, 10);
             index += 1;
         }
+        else if (arg === '--history' && hasValue) {
+            historyLimit = Number.parseInt(next, 10);
+            index += 1;
+        }
         else if (arg === '--verbose')
             verbose = true;
         else if (arg === '--pricing' && hasValue) {
@@ -98,10 +105,14 @@ export function parseOptions(argv) {
     if (!Number.isInteger(mergeLimit) || mergeLimit <= 0) {
         throw new Error('atrajectory: --merge must be a positive integer');
     }
+    if (!Number.isInteger(historyLimit) || historyLimit <= 0) {
+        throw new Error('atrajectory: --history must be a positive integer');
+    }
     return {
         pollIntervalMs,
         harnesses,
         mergeLimit,
+        historyLimit,
         verbose,
         pricing: loadPricing(pricingFile),
         ...pinned === undefined ? {} : { pinned },
@@ -109,7 +120,7 @@ export function parseOptions(argv) {
     };
 }
 /** Read one snapshot across every selected agent. */
-export function snapshot(options, adapters, pinned, feedRows) {
+export function snapshot(options, adapters, pinned) {
     let discovered = discoverAll(adapters);
     if (options.cwd !== undefined) {
         const root = options.cwd;
@@ -148,31 +159,39 @@ export function snapshot(options, adapters, pinned, feedRows) {
             title: entry.session.title ?? entry.session.id,
             unified: false,
             metrics: trajectory.metrics,
-            rows: trajectory.rows.slice(-feedRows),
+            rows: trajectory.rows.slice(-options.historyLimit),
         };
     }
-    const merged = mergeSessions(discovered.slice(0, options.mergeLimit), feedRows, { verbose: options.verbose, pricing: options.pricing });
+    const merged = mergeSessions(discovered.slice(0, options.mergeLimit), options.historyLimit, { verbose: options.verbose, pricing: options.pricing });
     return { sessions, unified: true, metrics: merged.metrics, rows: merged.rows };
 }
 /** Root component owning the poll loop and the pinned selection. */
 function Monitor({ options }) {
     const adapters = React.useMemo(() => allAdapters().filter(adapter => options.harnesses.includes(adapter.id)), [options]);
-    const feedRows = Math.max(4, (process.stdout.rows ?? 24) - CHROME_ROWS);
+    const [rows, setRows] = React.useState(process.stdout.rows ?? 24);
     const [pinned, setPinned] = React.useState(options.pinned);
-    const [view, setView] = React.useState(() => snapshot(options, adapters, options.pinned, feedRows));
+    const [view, setView] = React.useState(() => snapshot(options, adapters, options.pinned));
     const [tick, setTick] = React.useState(0);
+    // Ink does not re-render on resize by itself, and a stale viewport height
+    // silently drops rows off the bottom of the feed.
+    React.useEffect(() => {
+        const onResize = () => { setRows(process.stdout.rows ?? 24); };
+        process.stdout.on('resize', onResize);
+        return () => { process.stdout.off('resize', onResize); };
+    }, []);
     React.useEffect(() => {
         const timer = setInterval(() => {
-            setView(snapshot(options, adapters, pinned, feedRows));
+            setView(snapshot(options, adapters, pinned));
             // Advancing only after a completed read makes the indicator report that
             // polling is working, not merely that a timer is firing.
             setTick(previous => previous + 1);
         }, options.pollIntervalMs);
         return () => { clearInterval(timer); };
-    }, [pinned, options, adapters, feedRows]);
+    }, [pinned, options, adapters]);
     return React.createElement(App, {
         snapshot: view,
         tick,
+        feedRows: Math.max(4, rows - CHROME_ROWS),
         onUnify: () => { setPinned(undefined); },
         onSelect: (path) => { setPinned(path); },
     });

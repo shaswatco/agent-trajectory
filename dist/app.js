@@ -121,10 +121,26 @@ function SessionPicker({ sessions, pinned }) {
             })] }));
 }
 /** The monitor application. */
-export function App({ snapshot, tick, onUnify, onSelect }) {
+export function App({ snapshot, tick, feedRows, onUnify, onSelect }) {
     const { exit } = useApp();
     const [pickerOpen, setPickerOpen] = React.useState(false);
     const width = process.stdout.columns ?? 100;
+    const total = snapshot.rows.length;
+    const maxOffset = Math.max(0, total - feedRows);
+    /**
+     * Distance from the newest row, not an absolute index: history is capped by
+     * dropping the oldest rows, so an absolute offset would drift backwards
+     * through the feed every time the cap bites.
+     */
+    const [fromEnd, setFromEnd] = React.useState(0);
+    // Following means pinned to the newest row, which is also the resting state
+    // after `G`. Scrolling up leaves it, so arriving rows cannot yank the view.
+    const following = fromEnd === 0;
+    const offset = Math.max(0, maxOffset - fromEnd);
+    const visible = snapshot.rows.slice(offset, offset + feedRows);
+    const scrollBy = (delta) => {
+        setFromEnd(current => Math.min(maxOffset, Math.max(0, current + delta)));
+    };
     // Key handling needs raw mode, which only a TTY stdin offers. Piped output
     // still renders every pane; it just cannot be driven.
     const interactive = process.stdin.isTTY === true;
@@ -137,6 +153,19 @@ export function App({ snapshot, tick, onUnify, onSelect }) {
             onUnify();
             setPickerOpen(false);
         }
+        if (key.upArrow || input === 'k')
+            scrollBy(1);
+        if (key.downArrow || input === 'j')
+            scrollBy(-1);
+        if (key.pageUp)
+            scrollBy(feedRows);
+        if (key.pageDown)
+            scrollBy(-feedRows);
+        if (input === 'g')
+            setFromEnd(maxOffset);
+        if (input === 'G')
+            setFromEnd(0);
+        // Digits address sessions, so they must not be read as scroll input.
         const digit = Number.parseInt(input, 10);
         if (!Number.isNaN(digit)) {
             const entry = snapshot.sessions[digit];
@@ -154,9 +183,11 @@ export function App({ snapshot, tick, onUnify, onSelect }) {
         counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     const sources = [...counts].map(([label, total]) => `${label} ${String(total)}`).join(' · ');
-    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsxs(Text, { bold: true, color: "magenta", wrap: "truncate", children: [_jsx(Text, { color: "green", children: `${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} ` }), snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'] }), _jsx(Text, { color: "gray", children: "q quit \u00B7 s sessions \u00B7 u unified" })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsxs(Text, { bold: true, color: "magenta", wrap: "truncate", children: [_jsx(Text, { color: "green", children: `${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} ` }), snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'] }), _jsx(Text, { color: "gray", children: following
+                            ? 'q quit · s sessions · ↑ scroll'
+                            : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live` })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
                     ? _jsx(Text, { color: "red", children: snapshot.error })
                     : snapshot.rows.length === 0
                         ? _jsx(Text, { color: "gray", children: "no activity recorded yet" })
-                        : snapshot.rows.map(row => (_jsx(FeedLine, { row: row, width: width, showHarness: snapshot.unified, now: now }, `${String(row.index)}-${String(row.time)}`))) }), pickerOpen ? _jsx(SessionPicker, { sessions: snapshot.sessions, pinned: snapshot.pinned }) : null] }));
+                        : visible.map(row => (_jsx(FeedLine, { row: row, width: width, showHarness: snapshot.unified, now: now }, `${String(row.index)}-${String(row.time)}`))) }), pickerOpen ? _jsx(SessionPicker, { sessions: snapshot.sessions, pinned: snapshot.pinned }) : null] }));
 }

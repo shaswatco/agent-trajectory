@@ -108,6 +108,9 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `s` | toggle the session picker |
 | `u` | return to the unified feed |
 | `0`–`9` | jump to that session |
+| `↑` `↓` / `k` `j` | scroll one row |
+| `PgUp` `PgDn` | scroll one page |
+| `g` / `G` | jump to oldest / newest |
 
 ### Options
 
@@ -118,6 +121,7 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `--session <path>` | — | pin one session instead of the unified feed |
 | `--merge <n>` | `6` | sessions merged into the unified feed |
 | `--interval <ms>` | `1000` | poll interval |
+| `--history <n>` | `5000` | rows kept for scrollback |
 | `--verbose` | off | include injected-context rows |
 | `--pricing <path>` | see below | model price and capacity table |
 
@@ -163,6 +167,14 @@ Each feed row is one event:
 | `✖` | a failure — a tool error, or a turn that ended aborted or errored |
 
 The `›` versus `⋯` split is the one worth internalising: it separates what you asked for from the tens of thousands of tokens of context the agent injects around it.
+
+### Scrolling
+
+The feed follows the newest row until you scroll away from it. While scrolled
+back the header shows `PAUSED 4275-4292/4310` and arriving rows no longer move
+the view, so reading history is not interrupted by a working agent. `G` returns
+to following. Scrollback holds `--history` rows, independent of the terminal
+height.
 
 ## 🤖 Agent Coverage
 

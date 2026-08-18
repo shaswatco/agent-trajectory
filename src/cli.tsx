@@ -21,6 +21,12 @@ interface Options {
   /** Show injected-context rows, which otherwise dominate the feed. */
   verbose: boolean
   pricing: PricingTable
+  /**
+   * Rows retained for scrollback. This is deliberately NOT the viewport
+   * height: reading only what fits on screen makes older activity
+   * unrecoverable, which is the whole point of keeping a trajectory.
+   */
+  historyLimit: number
 }
 
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
@@ -42,12 +48,14 @@ Options
   --cwd [dir]        only sessions recorded under dir (bare flag means $PWD)
   --session <path>   pin one session instead of the unified feed
   --merge <n>        sessions merged into the unified feed, default 6
+  --history <n>      rows kept for scrollback, default 5000
   --interval <ms>    poll interval, default 1000
   -h, --help         show this help
   -v, --version      show the version
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
+  ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume following)
 
 Costs need a price table; free-tier models are recognised automatically and
 everything else shows $— until you write one. See the README.
@@ -76,6 +84,7 @@ export function parseOptions(argv: readonly string[]): Options {
   let harnesses: readonly HarnessId[] = HARNESS_IDS
   let cwd: string | undefined
   let mergeLimit = 6
+  let historyLimit = 5000
   let verbose = false
   let pricingFile: string | undefined
 
@@ -87,6 +96,7 @@ export function parseOptions(argv: readonly string[]): Options {
     else if (arg === '--session' && hasValue) { pinned = next; index += 1 }
     else if (arg === '--agent' && hasValue) { harnesses = parseAgents(next); index += 1 }
     else if (arg === '--merge' && hasValue) { mergeLimit = Number.parseInt(next, 10); index += 1 }
+    else if (arg === '--history' && hasValue) { historyLimit = Number.parseInt(next, 10); index += 1 }
     else if (arg === '--verbose') verbose = true
     else if (arg === '--pricing' && hasValue) { pricingFile = next; index += 1 }
     else if (arg === '--cwd') {
@@ -102,10 +112,14 @@ export function parseOptions(argv: readonly string[]): Options {
   if (!Number.isInteger(mergeLimit) || mergeLimit <= 0) {
     throw new Error('atrajectory: --merge must be a positive integer')
   }
+  if (!Number.isInteger(historyLimit) || historyLimit <= 0) {
+    throw new Error('atrajectory: --history must be a positive integer')
+  }
   return {
     pollIntervalMs,
     harnesses,
     mergeLimit,
+    historyLimit,
     verbose,
     pricing: loadPricing(pricingFile),
     ...pinned === undefined ? {} : { pinned },
@@ -118,7 +132,6 @@ export function snapshot(
   options: Options,
   adapters: readonly Adapter[],
   pinned: string | undefined,
-  feedRows: number,
 ): Snapshot {
   let discovered = discoverAll(adapters)
   if (options.cwd !== undefined) {
@@ -161,13 +174,13 @@ export function snapshot(
       title: entry.session.title ?? entry.session.id,
       unified: false,
       metrics: trajectory.metrics,
-      rows: trajectory.rows.slice(-feedRows),
+      rows: trajectory.rows.slice(-options.historyLimit),
     }
   }
 
   const merged = mergeSessions(
     discovered.slice(0, options.mergeLimit),
-    feedRows,
+    options.historyLimit,
     { verbose: options.verbose, pricing: options.pricing },
   )
   return { sessions, unified: true, metrics: merged.metrics, rows: merged.rows }
@@ -179,24 +192,33 @@ function Monitor({ options }: { options: Options }): React.ReactElement {
     () => allAdapters().filter(adapter => options.harnesses.includes(adapter.id)),
     [options],
   )
-  const feedRows = Math.max(4, (process.stdout.rows ?? 24) - CHROME_ROWS)
+  const [rows, setRows] = React.useState(process.stdout.rows ?? 24)
   const [pinned, setPinned] = React.useState<string | undefined>(options.pinned)
-  const [view, setView] = React.useState<Snapshot>(() => snapshot(options, adapters, options.pinned, feedRows))
+  const [view, setView] = React.useState<Snapshot>(() => snapshot(options, adapters, options.pinned))
   const [tick, setTick] = React.useState(0)
+
+  // Ink does not re-render on resize by itself, and a stale viewport height
+  // silently drops rows off the bottom of the feed.
+  React.useEffect(() => {
+    const onResize = (): void => { setRows(process.stdout.rows ?? 24) }
+    process.stdout.on('resize', onResize)
+    return () => { process.stdout.off('resize', onResize) }
+  }, [])
 
   React.useEffect(() => {
     const timer = setInterval(() => {
-      setView(snapshot(options, adapters, pinned, feedRows))
+      setView(snapshot(options, adapters, pinned))
       // Advancing only after a completed read makes the indicator report that
       // polling is working, not merely that a timer is firing.
       setTick(previous => previous + 1)
     }, options.pollIntervalMs)
     return () => { clearInterval(timer) }
-  }, [pinned, options, adapters, feedRows])
+  }, [pinned, options, adapters])
 
   return React.createElement(App, {
     snapshot: view,
     tick,
+    feedRows: Math.max(4, rows - CHROME_ROWS),
     onUnify: () => { setPinned(undefined) },
     onSelect: (path: string) => { setPinned(path) },
   })

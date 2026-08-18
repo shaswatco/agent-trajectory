@@ -32,6 +32,8 @@ export interface AppProps {
   snapshot: Snapshot
   /** Increments once per completed poll; drives the liveness indicator. */
   tick: number
+  /** Rows the feed may occupy, from the current terminal height. */
+  feedRows: number
   onUnify: () => void
   onSelect: (path: string) => void
 }
@@ -198,10 +200,28 @@ function SessionPicker({ sessions, pinned }: {
 }
 
 /** The monitor application. */
-export function App({ snapshot, tick, onUnify, onSelect }: AppProps): React.ReactElement {
+export function App({ snapshot, tick, feedRows, onUnify, onSelect }: AppProps): React.ReactElement {
   const { exit } = useApp()
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const width = process.stdout.columns ?? 100
+
+  const total = snapshot.rows.length
+  const maxOffset = Math.max(0, total - feedRows)
+  /**
+   * Distance from the newest row, not an absolute index: history is capped by
+   * dropping the oldest rows, so an absolute offset would drift backwards
+   * through the feed every time the cap bites.
+   */
+  const [fromEnd, setFromEnd] = React.useState(0)
+  // Following means pinned to the newest row, which is also the resting state
+  // after `G`. Scrolling up leaves it, so arriving rows cannot yank the view.
+  const following = fromEnd === 0
+  const offset = Math.max(0, maxOffset - fromEnd)
+  const visible = snapshot.rows.slice(offset, offset + feedRows)
+
+  const scrollBy = (delta: number): void => {
+    setFromEnd(current => Math.min(maxOffset, Math.max(0, current + delta)))
+  }
 
   // Key handling needs raw mode, which only a TTY stdin offers. Piped output
   // still renders every pane; it just cannot be driven.
@@ -214,6 +234,13 @@ export function App({ snapshot, tick, onUnify, onSelect }: AppProps): React.Reac
       onUnify()
       setPickerOpen(false)
     }
+    if (key.upArrow || input === 'k') scrollBy(1)
+    if (key.downArrow || input === 'j') scrollBy(-1)
+    if (key.pageUp) scrollBy(feedRows)
+    if (key.pageDown) scrollBy(-feedRows)
+    if (input === 'g') setFromEnd(maxOffset)
+    if (input === 'G') setFromEnd(0)
+    // Digits address sessions, so they must not be read as scroll input.
     const digit = Number.parseInt(input, 10)
     if (!Number.isNaN(digit)) {
       const entry = snapshot.sessions[digit]
@@ -240,7 +267,11 @@ export function App({ snapshot, tick, onUnify, onSelect }: AppProps): React.Reac
           <Text color="green">{`${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} `}</Text>
           {snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'}
         </Text>
-        <Text color="gray">q quit · s sessions · u unified</Text>
+        <Text color="gray">
+          {following
+            ? 'q quit · s sessions · ↑ scroll'
+            : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live`}
+        </Text>
       </Box>
       <MetricsStrip metrics={snapshot.metrics} />
       <ContextGauge metrics={snapshot.metrics} width={width} />
@@ -249,7 +280,7 @@ export function App({ snapshot, tick, onUnify, onSelect }: AppProps): React.Reac
           ? <Text color="red">{snapshot.error}</Text>
           : snapshot.rows.length === 0
             ? <Text color="gray">no activity recorded yet</Text>
-            : snapshot.rows.map(row => (
+            : visible.map(row => (
               <FeedLine
                 key={`${String(row.index)}-${String(row.time)}`}
                 row={row}
