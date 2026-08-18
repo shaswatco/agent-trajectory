@@ -82,6 +82,7 @@ function foldLog(records) {
     let sawUsage = false;
     let contextWindow;
     let contextTokens;
+    let model;
     let stepStart;
     let firstToken;
     const push = (row) => {
@@ -199,6 +200,13 @@ function foldLog(records) {
             case 'request/context':
                 contextWindow = numberAt(data, 'contextWindow') ?? contextWindow;
                 break;
+            case 'request/header': {
+                const selection = recordAt(data, 'model') ?? data;
+                const named = selection?.['model'] ?? selection?.['id'];
+                if (typeof named === 'string')
+                    model = named;
+                break;
+            }
             default:
                 // Chunks, policy records and boundary markers carry no row.
                 break;
@@ -216,6 +224,8 @@ function foldLog(records) {
         ...prompt > 0 ? { cacheHitRatio: cacheRead / prompt } : {},
         ...contextWindow === undefined ? {} : { contextWindow },
         ...contextTokens === undefined ? {} : { contextTokens },
+        ...sawUsage ? { cacheWriteTokens: cacheWrite } : {},
+        ...model === undefined ? {} : { model },
     };
     return { metrics, rows };
 }

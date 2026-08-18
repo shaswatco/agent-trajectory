@@ -5,6 +5,8 @@ import { render } from 'ink'
 import React from 'react'
 import { App } from './app.js'
 import type { Snapshot } from './app.js'
+import { loadPricing, pricingPath } from './models.js'
+import type { PricingTable } from './models.js'
 import { allAdapters, discoverAll, mergeSessions, readTagged, underCwd } from './registry.js'
 import { HARNESS_IDS } from './types.js'
 import type { Adapter, HarnessId } from './types.js'
@@ -16,6 +18,9 @@ interface Options {
   harnesses: readonly HarnessId[]
   cwd?: string
   mergeLimit: number
+  /** Show injected-context rows, which otherwise dominate the feed. */
+  verbose: boolean
+  pricing: PricingTable
 }
 
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
@@ -32,6 +37,8 @@ Usage
 
 Options
   --agent <list>     comma-separated: claude,codex,deepseek,hermes (default all)
+  --verbose          include injected context rows (system prompts, tool results)
+  --pricing <path>   model price table (default ${pricingPath()})
   --cwd [dir]        only sessions recorded under dir (bare flag means $PWD)
   --session <path>   pin one session instead of the unified feed
   --merge <n>        sessions merged into the unified feed, default 6
@@ -41,6 +48,9 @@ Options
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
+
+Costs need a price table; free-tier models are recognised automatically and
+everything else shows $— until you write one. See the README.
 
 Everything is read-only: session logs are never written, locked or deleted.
 `
@@ -66,6 +76,8 @@ export function parseOptions(argv: readonly string[]): Options {
   let harnesses: readonly HarnessId[] = HARNESS_IDS
   let cwd: string | undefined
   let mergeLimit = 6
+  let verbose = false
+  let pricingFile: string | undefined
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -75,6 +87,8 @@ export function parseOptions(argv: readonly string[]): Options {
     else if (arg === '--session' && hasValue) { pinned = next; index += 1 }
     else if (arg === '--agent' && hasValue) { harnesses = parseAgents(next); index += 1 }
     else if (arg === '--merge' && hasValue) { mergeLimit = Number.parseInt(next, 10); index += 1 }
+    else if (arg === '--verbose') verbose = true
+    else if (arg === '--pricing' && hasValue) { pricingFile = next; index += 1 }
     else if (arg === '--cwd') {
       // Bare `--cwd` means "here", the common case; a value narrows elsewhere.
       cwd = hasValue ? next : process.cwd()
@@ -88,7 +102,15 @@ export function parseOptions(argv: readonly string[]): Options {
   if (!Number.isInteger(mergeLimit) || mergeLimit <= 0) {
     throw new Error('atrajectory: --merge must be a positive integer')
   }
-  return { pollIntervalMs, harnesses, mergeLimit, ...pinned === undefined ? {} : { pinned }, ...cwd === undefined ? {} : { cwd } }
+  return {
+    pollIntervalMs,
+    harnesses,
+    mergeLimit,
+    verbose,
+    pricing: loadPricing(pricingFile),
+    ...pinned === undefined ? {} : { pinned },
+    ...cwd === undefined ? {} : { cwd },
+  }
 }
 
 /** Read one snapshot across every selected agent. */
@@ -132,7 +154,7 @@ export function snapshot(
         error: `pinned session is no longer discoverable: ${pinned}`,
       }
     }
-    const trajectory = readTagged(entry)
+    const trajectory = readTagged(entry, { verbose: options.verbose, pricing: options.pricing })
     return {
       sessions,
       pinned,
@@ -143,7 +165,11 @@ export function snapshot(
     }
   }
 
-  const merged = mergeSessions(discovered.slice(0, options.mergeLimit), feedRows)
+  const merged = mergeSessions(
+    discovered.slice(0, options.mergeLimit),
+    feedRows,
+    { verbose: options.verbose, pricing: options.pricing },
+  )
   return { sessions, unified: true, metrics: merged.metrics, rows: merged.rows }
 }
 
@@ -156,16 +182,21 @@ function Monitor({ options }: { options: Options }): React.ReactElement {
   const feedRows = Math.max(4, (process.stdout.rows ?? 24) - CHROME_ROWS)
   const [pinned, setPinned] = React.useState<string | undefined>(options.pinned)
   const [view, setView] = React.useState<Snapshot>(() => snapshot(options, adapters, options.pinned, feedRows))
+  const [tick, setTick] = React.useState(0)
 
   React.useEffect(() => {
     const timer = setInterval(() => {
       setView(snapshot(options, adapters, pinned, feedRows))
+      // Advancing only after a completed read makes the indicator report that
+      // polling is working, not merely that a timer is firing.
+      setTick(previous => previous + 1)
     }, options.pollIntervalMs)
     return () => { clearInterval(timer) }
   }, [pinned, options, adapters, feedRows])
 
   return React.createElement(App, {
     snapshot: view,
+    tick,
     onUnify: () => { setPinned(undefined) },
     onSelect: (path: string) => { setPinned(path) },
   })

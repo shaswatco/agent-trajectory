@@ -49,6 +49,27 @@ function seconds(ms) {
 function count(value) {
     return value === undefined ? '—' : String(value);
 }
+/** Render a USD cost, or an em dash when the model has no configured price. */
+function money(value) {
+    if (value === undefined)
+        return '$—';
+    if (value === 0)
+        return 'free';
+    return value < 0.01 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;
+}
+/** Age of an event relative to now, in the narrowest useful unit. */
+function ago(time, now) {
+    const seconds = Math.max(0, Math.round((now - time) / 1000));
+    if (seconds < 60)
+        return `${String(seconds)}s`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60)
+        return `${String(minutes)}m`;
+    const hours = Math.round(minutes / 60);
+    return hours < 48 ? `${String(hours)}h` : `${String(Math.round(hours / 24))}d`;
+}
+/** Frames of the liveness indicator, advanced once per poll. */
+const HEARTBEAT = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 /** Metrics strip. */
 function MetricsStrip({ metrics }) {
     const cells = [
@@ -60,6 +81,7 @@ function MetricsStrip({ metrics }) {
         metrics.cacheHitRatio === undefined ? 'cache —' : `cache ${(metrics.cacheHitRatio * 100).toFixed(0)}%`,
         `in ${tokens(metrics.inputTokens)}`,
         `out ${tokens(metrics.outputTokens)}`,
+        money(metrics.costUsd),
     ];
     return _jsx(Text, { color: "gray", wrap: "truncate", children: cells.join(' · ') });
 }
@@ -76,12 +98,14 @@ function ContextGauge({ metrics, width }) {
     return (_jsxs(Text, { wrap: "truncate", children: [_jsx(Text, { color: "gray", children: "ctx " }), _jsx(Text, { color: color, children: '█'.repeat(filled) }), _jsx(Text, { color: "gray", children: '░'.repeat(barWidth - filled) }), _jsx(Text, { color: "gray", children: ` ${(ratio * 100).toFixed(0)}% · ${tokens(contextTokens)}/${tokens(contextWindow)}` })] }));
 }
 /** One activity row, held to a single terminal line. */
-function FeedLine({ row, width, showHarness }) {
+function FeedLine({ row, width, showHarness, now }) {
     const duration = row.durationMs === undefined ? '' : ` ${seconds(row.durationMs)}`;
+    const repeat = row.repeat === undefined ? '' : ` ×${String(row.repeat)}`;
     const tag = showHarness && row.harness !== undefined ? row.harness.padEnd(7).slice(0, 7) : '';
-    const budget = Math.max(8, width - 22 - tag.length - duration.length);
+    const age = row.time > 0 ? ago(row.time, now).padStart(4) : '   —';
+    const budget = Math.max(8, width - 27 - tag.length - duration.length - repeat.length);
     const text = row.text.length > budget ? `${row.text.slice(0, budget - 1)}…` : row.text;
-    return (_jsxs(Text, { wrap: "truncate", children: [_jsx(Text, { color: "gray", children: `#${String(row.index).padEnd(4)}` }), tag.length > 0 ? _jsx(Text, { color: HARNESS_COLOR[row.harness ?? ''] ?? 'gray', children: tag }) : null, _jsx(Text, { color: KIND_COLOR[row.kind], children: `${KIND_GLYPH[row.kind]} ${row.label.padEnd(12).slice(0, 12)} ${text}` }), _jsx(Text, { color: "gray", children: duration })] }));
+    return (_jsxs(Text, { wrap: "truncate", children: [_jsx(Text, { color: "gray", children: `${age} ` }), tag.length > 0 ? _jsx(Text, { color: HARNESS_COLOR[row.harness ?? ''] ?? 'gray', children: tag }) : null, _jsx(Text, { color: KIND_COLOR[row.kind], children: `${KIND_GLYPH[row.kind]} ${row.label.padEnd(12).slice(0, 12)} ${text}` }), _jsx(Text, { color: "yellow", children: repeat }), _jsx(Text, { color: "gray", children: duration })] }));
 }
 /** Session picker overlay. */
 function SessionPicker({ sessions, pinned }) {
@@ -97,7 +121,7 @@ function SessionPicker({ sessions, pinned }) {
             })] }));
 }
 /** The monitor application. */
-export function App({ snapshot, onUnify, onSelect }) {
+export function App({ snapshot, tick, onUnify, onSelect }) {
     const { exit } = useApp();
     const [pickerOpen, setPickerOpen] = React.useState(false);
     const width = process.stdout.columns ?? 100;
@@ -122,15 +146,17 @@ export function App({ snapshot, onUnify, onSelect }) {
             }
         }
     }, { isActive: interactive });
+    // One clock per render keeps every relative age on the same instant.
+    const now = Date.now();
     const counts = new Map();
     for (const session of snapshot.sessions) {
         const label = HARNESS_LABEL[session.harness];
         counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     const sources = [...counts].map(([label, total]) => `${label} ${String(total)}`).join(' · ');
-    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsx(Text, { bold: true, color: "magenta", wrap: "truncate", children: snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory' }), _jsx(Text, { color: "gray", children: "q quit \u00B7 s sessions \u00B7 u unified" })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsxs(Text, { bold: true, color: "magenta", wrap: "truncate", children: [_jsx(Text, { color: "green", children: `${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} ` }), snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'] }), _jsx(Text, { color: "gray", children: "q quit \u00B7 s sessions \u00B7 u unified" })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
                     ? _jsx(Text, { color: "red", children: snapshot.error })
                     : snapshot.rows.length === 0
                         ? _jsx(Text, { color: "gray", children: "no activity recorded yet" })
-                        : snapshot.rows.map(row => (_jsx(FeedLine, { row: row, width: width, showHarness: snapshot.unified }, `${String(row.index)}-${String(row.time)}`))) }), pickerOpen ? _jsx(SessionPicker, { sessions: snapshot.sessions, pinned: snapshot.pinned }) : null] }));
+                        : snapshot.rows.map(row => (_jsx(FeedLine, { row: row, width: width, showHarness: snapshot.unified, now: now }, `${String(row.index)}-${String(row.time)}`))) }), pickerOpen ? _jsx(SessionPicker, { sessions: snapshot.sessions, pinned: snapshot.pinned }) : null] }));
 }

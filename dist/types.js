@@ -51,5 +51,12 @@ export function mergeMetrics(parts) {
         // honest single number.
         contextWindow: max(m => m.contextWindow),
         contextTokens: max(m => m.contextTokens),
+        cacheWriteTokens: sum(m => m.cacheWriteTokens),
+        // Several models in one view have no single id; cost still adds up.
+        model: (() => {
+            const ids = [...new Set(parts.map(m => m.model).filter((v) => v !== undefined))];
+            return ids.length === 1 ? ids[0] : ids.length === 0 ? undefined : `${String(ids.length)} models`;
+        })(),
+        costUsd: sum(m => m.costUsd),
     };
 }

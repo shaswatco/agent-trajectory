@@ -37,6 +37,7 @@ function foldRollout(records: readonly Record<string, unknown>[]): FoldedRollout
   const rows: Row[] = []
   let index = 0
   let cwd: string | undefined
+  let model: string | undefined
   let turns = 0
   let steps = 0
   let llmMs = 0
@@ -61,6 +62,7 @@ function foldRollout(records: readonly Record<string, unknown>[]): FoldedRollout
 
     if (family === 'session_meta' || family === 'turn_context') {
       if (typeof payload['cwd'] === 'string') cwd = payload['cwd'] as string
+      if (typeof payload['model'] === 'string') model = payload['model'] as string
       continue
     }
     if (family !== 'event_msg') continue
@@ -137,6 +139,7 @@ function foldRollout(records: readonly Record<string, unknown>[]): FoldedRollout
     ...prompt > 0 && cached !== undefined ? { cacheHitRatio: cached / prompt } : {},
     ...contextWindow === undefined ? {} : { contextWindow },
     ...contextTokens === undefined ? {} : { contextTokens },
+    ...model === undefined ? {} : { model },
   }
   return { metrics, rows, ...cwd === undefined ? {} : { cwd } }
 }

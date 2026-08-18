@@ -38,6 +38,8 @@ export interface Row {
   time: number
   /** Wall time in ms for rows the log pairs. */
   durationMs?: number
+  /** Consecutive identical rows collapsed into this one; absent means 1. */
+  repeat?: number
   /** Owning agent, stamped when rows from several sources share one feed. */
   harness?: string
 }
@@ -80,6 +82,12 @@ export interface Metrics {
   contextWindow?: number | undefined
   /** Best estimate of currently occupied context. */
   contextTokens?: number | undefined
+  /** Cache-write tokens, kept separate because they are priced differently. */
+  cacheWriteTokens?: number | undefined
+  /** Model id the session last used, as the agent recorded it. */
+  model?: string | undefined
+  /** Cost in USD, absent when the model has no configured price. */
+  costUsd?: number | undefined
 }
 
 /** A session's normalized trajectory. */
@@ -140,5 +148,12 @@ export function mergeMetrics(parts: readonly Metrics[]): Metrics {
     // honest single number.
     contextWindow: max(m => m.contextWindow),
     contextTokens: max(m => m.contextTokens),
+    cacheWriteTokens: sum(m => m.cacheWriteTokens),
+    // Several models in one view have no single id; cost still adds up.
+    model: (() => {
+      const ids = [...new Set(parts.map(m => m.model).filter((v): v is string => v !== undefined))]
+      return ids.length === 1 ? ids[0] : ids.length === 0 ? undefined : `${String(ids.length)} models`
+    })(),
+    costUsd: sum(m => m.costUsd),
   }
 }

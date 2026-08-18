@@ -3,6 +3,7 @@
 import { render } from 'ink';
 import React from 'react';
 import { App } from './app.js';
+import { loadPricing, pricingPath } from './models.js';
 import { allAdapters, discoverAll, mergeSessions, readTagged, underCwd } from './registry.js';
 import { HARNESS_IDS } from './types.js';
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
@@ -18,6 +19,8 @@ Usage
 
 Options
   --agent <list>     comma-separated: claude,codex,deepseek,hermes (default all)
+  --verbose          include injected context rows (system prompts, tool results)
+  --pricing <path>   model price table (default ${pricingPath()})
   --cwd [dir]        only sessions recorded under dir (bare flag means $PWD)
   --session <path>   pin one session instead of the unified feed
   --merge <n>        sessions merged into the unified feed, default 6
@@ -27,6 +30,9 @@ Options
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
+
+Costs need a price table; free-tier models are recognised automatically and
+everything else shows $— until you write one. See the README.
 
 Everything is read-only: session logs are never written, locked or deleted.
 `;
@@ -51,6 +57,8 @@ export function parseOptions(argv) {
     let harnesses = HARNESS_IDS;
     let cwd;
     let mergeLimit = 6;
+    let verbose = false;
+    let pricingFile;
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
         const next = argv[index + 1];
@@ -71,6 +79,12 @@ export function parseOptions(argv) {
             mergeLimit = Number.parseInt(next, 10);
             index += 1;
         }
+        else if (arg === '--verbose')
+            verbose = true;
+        else if (arg === '--pricing' && hasValue) {
+            pricingFile = next;
+            index += 1;
+        }
         else if (arg === '--cwd') {
             // Bare `--cwd` means "here", the common case; a value narrows elsewhere.
             cwd = hasValue ? next : process.cwd();
@@ -84,7 +98,15 @@ export function parseOptions(argv) {
     if (!Number.isInteger(mergeLimit) || mergeLimit <= 0) {
         throw new Error('atrajectory: --merge must be a positive integer');
     }
-    return { pollIntervalMs, harnesses, mergeLimit, ...pinned === undefined ? {} : { pinned }, ...cwd === undefined ? {} : { cwd } };
+    return {
+        pollIntervalMs,
+        harnesses,
+        mergeLimit,
+        verbose,
+        pricing: loadPricing(pricingFile),
+        ...pinned === undefined ? {} : { pinned },
+        ...cwd === undefined ? {} : { cwd },
+    };
 }
 /** Read one snapshot across every selected agent. */
 export function snapshot(options, adapters, pinned, feedRows) {
@@ -119,7 +141,7 @@ export function snapshot(options, adapters, pinned, feedRows) {
                 error: `pinned session is no longer discoverable: ${pinned}`,
             };
         }
-        const trajectory = readTagged(entry);
+        const trajectory = readTagged(entry, { verbose: options.verbose, pricing: options.pricing });
         return {
             sessions,
             pinned,
@@ -129,7 +151,7 @@ export function snapshot(options, adapters, pinned, feedRows) {
             rows: trajectory.rows.slice(-feedRows),
         };
     }
-    const merged = mergeSessions(discovered.slice(0, options.mergeLimit), feedRows);
+    const merged = mergeSessions(discovered.slice(0, options.mergeLimit), feedRows, { verbose: options.verbose, pricing: options.pricing });
     return { sessions, unified: true, metrics: merged.metrics, rows: merged.rows };
 }
 /** Root component owning the poll loop and the pinned selection. */
@@ -138,14 +160,19 @@ function Monitor({ options }) {
     const feedRows = Math.max(4, (process.stdout.rows ?? 24) - CHROME_ROWS);
     const [pinned, setPinned] = React.useState(options.pinned);
     const [view, setView] = React.useState(() => snapshot(options, adapters, options.pinned, feedRows));
+    const [tick, setTick] = React.useState(0);
     React.useEffect(() => {
         const timer = setInterval(() => {
             setView(snapshot(options, adapters, pinned, feedRows));
+            // Advancing only after a completed read makes the indicator report that
+            // polling is working, not merely that a timer is firing.
+            setTick(previous => previous + 1);
         }, options.pollIntervalMs);
         return () => { clearInterval(timer); };
     }, [pinned, options, adapters, feedRows]);
     return React.createElement(App, {
         snapshot: view,
+        tick,
         onUnify: () => { setPinned(undefined); },
         onSelect: (path) => { setPinned(path); },
     });

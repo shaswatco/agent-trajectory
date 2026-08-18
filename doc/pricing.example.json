@@ -1,0 +1,11 @@
+{
+  "//": "Copy to ~/.config/agent-trajectory/pricing.json and edit.",
+  "//prices": "USD per million tokens. VERIFY AGAINST YOUR PROVIDER — these are placeholders, not quotes.",
+  "//window": "contextWindow is only needed for agents that do not log their own (Claude Code). Codex and DeepSeek Harness report theirs.",
+
+  "claude-sonnet-5": { "contextWindow": 1000000, "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+  "claude-opus-5": { "contextWindow": 1000000, "input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75 },
+
+  "gpt-5.6": { "input": 1.25, "output": 10 },
+  "deepseek-v4-pro": { "input": 0.28, "output": 0.42 }
+}

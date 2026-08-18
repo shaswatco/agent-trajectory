@@ -71,7 +71,8 @@ function foldDocument(document: Record<string, unknown>, fallbackTime: number): 
     }
   }
 
-  return { metrics: { turns, steps }, rows }
+  const model = typeof document['model'] === 'string' ? document['model'] : undefined
+  return { metrics: { turns, steps, ...model === undefined ? {} : { model } }, rows }
 }
 
 /** Build the Hermes adapter. */

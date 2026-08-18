@@ -40,6 +40,9 @@ A read-only terminal monitor for AI coding agents. It watches the session logs y
 - **📊 Real metrics** — turns, steps, model wall time, time-to-first-token, decode throughput, cache hit rate and token counts, taken from what the agent actually logged.
 - **📏 Context gauge** — occupancy against the model's own reported window, so you can see compaction coming.
 - **🎯 Focus what matters** — `--cwd` narrows to the project you're standing in; the session picker jumps to any recent session across any agent.
+- **💵 Cost tracking** — free-tier models are recognised automatically; everything else prices from a table you own.
+- **⏱️ Live by default** — a relative-age column and a heartbeat, so a stalled monitor never looks like an idle agent.
+- **🔇 Quiet by default** — injected context is hidden and repeated lines collapse to `×7`, leaving the actions visible.
 - **🚫 No fabricated numbers** — a figure an agent doesn't record shows as `—`, never as a misleading `0`.
 - **🪶 Nearly dependency-free** — `ink` and `react`, nothing else. Zstandard decoding uses Node's own `zlib`.
 - **🔒 Read-only and offline** — no writes, no locks, no network, no telemetry, no config file.
@@ -115,6 +118,35 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `--session <path>` | — | pin one session instead of the unified feed |
 | `--merge <n>` | `6` | sessions merged into the unified feed |
 | `--interval <ms>` | `1000` | poll interval |
+| `--verbose` | off | include injected-context rows |
+| `--pricing <path>` | see below | model price and capacity table |
+
+## 💵 Costs and Context Windows
+
+Two numbers can't be inferred from a log: what a model costs, and how large its
+context window is when the agent doesn't record one. Both come from a file you
+own, so nothing here is guessed on your behalf.
+
+```bash
+mkdir -p ~/.config/agent-trajectory
+cp doc/pricing.example.json ~/.config/agent-trajectory/pricing.json
+```
+
+```json
+{
+  "claude-sonnet-5": { "contextWindow": 1000000, "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+  "gpt-5.6": { "input": 1.25, "output": 10 }
+}
+```
+
+Prices are USD per million tokens. Model ids are matched after stripping
+provider prefixes and deployment suffixes, so `z-ai/glm-4.5-air:free`,
+`glm-4.5-air:cloud` and `glm-4.5-air` all resolve to one entry.
+
+- **Free tiers cost nothing**, and ids ending `-free` or `:free` are detected without configuration.
+- **An unpriced model shows `$—`**, never `$0.00`.
+- **`contextWindow` is only needed for Claude Code.** Codex and DeepSeek Harness log their own, and a logged value always wins.
+- **A window your usage exceeds is discarded**, not clamped — a bar pinned at 100% because the configured capacity is wrong reads exactly like a context about to overflow, which is the one thing the gauge exists to warn about.
 
 ## 🔍 Reading the Screen
 
@@ -140,10 +172,10 @@ Agents log different things, and this tool reports only what each one actually r
 |-------|:----:|:-------------:|:--------------:|:------:|:--------------:|
 | **DeepSeek Harness** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Codex** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Claude Code** | ✅ | ✅ | ✅ | — | — |
+| **Claude Code** | ✅ | ✅ | ✅ | — | ⚙️ |
 | **Hermes** | ✅ | ✅ | — | — | — |
 
-Claude Code transcripts carry per-message token usage but no step timing, so throughput and TTFT are unavailable. Hermes records neither, so it contributes rows and counts only.
+Claude Code transcripts carry per-message token usage but no step timing, so throughput and TTFT are unavailable, and its context window has to be configured (⚙️) rather than read from the log. Hermes records neither, so it contributes rows and counts only.
 
 ## 📂 Where It Reads
 
@@ -210,7 +242,8 @@ src/
 ## 🗺️ Known Limitations
 
 - **No test suite yet.** The adapters encode assumptions about log formats derived by inspection, not from published specifications.
-- **Claude context occupancy is approximate.** Claude Code transcripts report no context window, so the gauge shows tokens occupied without a ratio, and cache-creation accounting can overstate it.
+- **Claude context occupancy is approximate.** It is derived from the prompt side of the newest request, and cache-creation accounting can overstate it. Configure `contextWindow` to get a ratio; the gauge suppresses itself if occupancy exceeds the value you set.
+- **Prices are yours to maintain.** There is no bundled price list, because a stale one lies quietly.
 - **Unified metrics mix models.** Tokens sum, latency figures average, and the context window takes the maximum. Pin a single session for numbers you intend to quote.
 - **Hermes has no tail to follow.** It writes one JSON document per session, so a poll sees the last complete save.
 

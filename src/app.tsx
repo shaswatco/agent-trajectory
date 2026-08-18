@@ -30,6 +30,8 @@ export interface Snapshot {
 /** Props of the application. */
 export interface AppProps {
   snapshot: Snapshot
+  /** Increments once per completed poll; drives the liveness indicator. */
+  tick: number
   onUnify: () => void
   onSelect: (path: string) => void
 }
@@ -77,6 +79,26 @@ function count(value: number | undefined): string {
   return value === undefined ? '—' : String(value)
 }
 
+/** Render a USD cost, or an em dash when the model has no configured price. */
+function money(value: number | undefined): string {
+  if (value === undefined) return '$—'
+  if (value === 0) return 'free'
+  return value < 0.01 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`
+}
+
+/** Age of an event relative to now, in the narrowest useful unit. */
+function ago(time: number, now: number): string {
+  const seconds = Math.max(0, Math.round((now - time) / 1000))
+  if (seconds < 60) return `${String(seconds)}s`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${String(minutes)}m`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${String(hours)}h` : `${String(Math.round(hours / 24))}d`
+}
+
+/** Frames of the liveness indicator, advanced once per poll. */
+const HEARTBEAT = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
 /** Metrics strip. */
 function MetricsStrip({ metrics }: { metrics: Metrics }): React.ReactElement {
   const cells = [
@@ -88,6 +110,7 @@ function MetricsStrip({ metrics }: { metrics: Metrics }): React.ReactElement {
     metrics.cacheHitRatio === undefined ? 'cache —' : `cache ${(metrics.cacheHitRatio * 100).toFixed(0)}%`,
     `in ${tokens(metrics.inputTokens)}`,
     `out ${tokens(metrics.outputTokens)}`,
+    money(metrics.costUsd),
   ]
   return <Text color="gray" wrap="truncate">{cells.join(' · ')}</Text>
 }
@@ -117,22 +140,26 @@ function ContextGauge({ metrics, width }: { metrics: Metrics; width: number }): 
 }
 
 /** One activity row, held to a single terminal line. */
-function FeedLine({ row, width, showHarness }: {
+function FeedLine({ row, width, showHarness, now }: {
   row: Row
   width: number
   showHarness: boolean
+  now: number
 }): React.ReactElement {
   const duration = row.durationMs === undefined ? '' : ` ${seconds(row.durationMs)}`
+  const repeat = row.repeat === undefined ? '' : ` ×${String(row.repeat)}`
   const tag = showHarness && row.harness !== undefined ? row.harness.padEnd(7).slice(0, 7) : ''
-  const budget = Math.max(8, width - 22 - tag.length - duration.length)
+  const age = row.time > 0 ? ago(row.time, now).padStart(4) : '   —'
+  const budget = Math.max(8, width - 27 - tag.length - duration.length - repeat.length)
   const text = row.text.length > budget ? `${row.text.slice(0, budget - 1)}…` : row.text
   return (
     <Text wrap="truncate">
-      <Text color="gray">{`#${String(row.index).padEnd(4)}`}</Text>
+      <Text color="gray">{`${age} `}</Text>
       {tag.length > 0 ? <Text color={HARNESS_COLOR[row.harness ?? ''] ?? 'gray'}>{tag}</Text> : null}
       <Text color={KIND_COLOR[row.kind]}>
         {`${KIND_GLYPH[row.kind]} ${row.label.padEnd(12).slice(0, 12)} ${text}`}
       </Text>
+      <Text color="yellow">{repeat}</Text>
       <Text color="gray">{duration}</Text>
     </Text>
   )
@@ -171,7 +198,7 @@ function SessionPicker({ sessions, pinned }: {
 }
 
 /** The monitor application. */
-export function App({ snapshot, onUnify, onSelect }: AppProps): React.ReactElement {
+export function App({ snapshot, tick, onUnify, onSelect }: AppProps): React.ReactElement {
   const { exit } = useApp()
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const width = process.stdout.columns ?? 100
@@ -197,6 +224,8 @@ export function App({ snapshot, onUnify, onSelect }: AppProps): React.ReactEleme
     }
   }, { isActive: interactive })
 
+  // One clock per render keeps every relative age on the same instant.
+  const now = Date.now()
   const counts = new Map<string, number>()
   for (const session of snapshot.sessions) {
     const label = HARNESS_LABEL[session.harness]
@@ -208,6 +237,7 @@ export function App({ snapshot, onUnify, onSelect }: AppProps): React.ReactEleme
     <Box flexDirection="column" width={width}>
       <Box justifyContent="space-between">
         <Text bold color="magenta" wrap="truncate">
+          <Text color="green">{`${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} `}</Text>
           {snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'}
         </Text>
         <Text color="gray">q quit · s sessions · u unified</Text>
@@ -225,6 +255,7 @@ export function App({ snapshot, onUnify, onSelect }: AppProps): React.ReactEleme
                 row={row}
                 width={width}
                 showHarness={snapshot.unified}
+                now={now}
               />
             ))}
       </Box>

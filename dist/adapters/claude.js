@@ -9,6 +9,7 @@
  */
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { isRealModel } from '../models.js';
 import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, safeReaddir } from './util.js';
 /** Default transcript root. */
 export function claudeRoot(env = process.env) {
@@ -45,6 +46,7 @@ function foldTranscript(records) {
     let turns = 0;
     let steps = 0;
     let lastPrompt;
+    let model;
     const push = (row) => {
         index += 1;
         rows.push({ ...row, index });
@@ -75,6 +77,9 @@ function foldTranscript(records) {
         }
         if (type === 'assistant' && message !== undefined) {
             steps += 1;
+            const declared = message['model'];
+            if (typeof declared === 'string' && isRealModel(declared))
+                model = declared;
             const usage = usageOf(message);
             if (usage !== undefined) {
                 input += usage.input;
@@ -122,8 +127,10 @@ function foldTranscript(records) {
         inputTokens: input,
         outputTokens: output,
         cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
         ...prompt > 0 ? { cacheHitRatio: cacheRead / prompt } : {},
         ...lastPrompt === undefined ? {} : { contextTokens: lastPrompt },
+        ...model === undefined ? {} : { model },
     };
     return { metrics, rows };
 }

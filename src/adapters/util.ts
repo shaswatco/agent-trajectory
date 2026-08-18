@@ -28,6 +28,42 @@ export function modifiedAt(path: string): number | undefined {
   }
 }
 
+/**
+ * Parsed-content cache keyed by identity, so the poll loop re-parses only the
+ * files that actually changed. Session logs are append-only and can reach
+ * megabytes; re-reading every one of them each second is the difference
+ * between an idle monitor and a warm laptop.
+ */
+const cache = new Map<string, { size: number; mtime: number; value: unknown }>()
+
+/** Identity of a file for cache purposes, or undefined when unreadable. */
+function identity(path: string): { size: number; mtime: number } | undefined {
+  try {
+    const stats = statSync(path)
+    return { size: stats.size, mtime: stats.mtimeMs }
+  } catch {
+    // Raced deletion; the caller falls back to a fresh read that also fails.
+    return undefined
+  }
+}
+
+/**
+ * Return the cached parse for `path`, or compute and store one.
+ * @param path - file whose parse is cached.
+ * @param compute - parser run only when the file changed.
+ * @returns the cached or freshly computed value.
+ */
+export function cached<T>(path: string, compute: () => T): T {
+  const now = identity(path)
+  const hit = cache.get(path)
+  if (now !== undefined && hit !== undefined && hit.size === now.size && hit.mtime === now.mtime) {
+    return hit.value as T
+  }
+  const value = compute()
+  if (now !== undefined) cache.set(path, { ...now, value })
+  return value
+}
+
 /** Read a file as text, or undefined when unreadable. */
 export function readText(path: string): string | undefined {
   try {
@@ -60,10 +96,12 @@ export function parseJsonl(text: string): Record<string, unknown>[] {
   return records
 }
 
-/** Read and parse a JSONL file. */
+/** Read and parse a JSONL file, reusing the previous parse when unchanged. */
 export function readJsonl(path: string): Record<string, unknown>[] {
-  const text = readText(path)
-  return text === undefined ? [] : parseJsonl(text)
+  return cached(path, () => {
+    const text = readText(path)
+    return text === undefined ? [] : parseJsonl(text)
+  })
 }
 
 /** Zstandard frame magic (little-endian 0xFD2FB528). */

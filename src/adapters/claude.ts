@@ -11,6 +11,7 @@
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
+import { isRealModel } from '../models.js'
 import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, safeReaddir } from './util.js'
 
 /** Default transcript root. */
@@ -58,6 +59,7 @@ function foldTranscript(records: readonly Record<string, unknown>[]): Trajectory
   let turns = 0
   let steps = 0
   let lastPrompt: number | undefined
+  let model: string | undefined
 
   const push = (row: Omit<Row, 'index'>): void => {
     index += 1
@@ -91,6 +93,8 @@ function foldTranscript(records: readonly Record<string, unknown>[]): Trajectory
 
     if (type === 'assistant' && message !== undefined) {
       steps += 1
+      const declared = message['model']
+      if (typeof declared === 'string' && isRealModel(declared)) model = declared
       const usage = usageOf(message)
       if (usage !== undefined) {
         input += usage.input
@@ -136,8 +140,10 @@ function foldTranscript(records: readonly Record<string, unknown>[]): Trajectory
     inputTokens: input,
     outputTokens: output,
     cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
     ...prompt > 0 ? { cacheHitRatio: cacheRead / prompt } : {},
     ...lastPrompt === undefined ? {} : { contextTokens: lastPrompt },
+    ...model === undefined ? {} : { model },
   }
   return { metrics, rows }
 }

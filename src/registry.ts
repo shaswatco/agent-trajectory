@@ -4,6 +4,8 @@ import { claudeAdapter } from './adapters/claude.js'
 import { codexAdapter } from './adapters/codex.js'
 import { deepseekAdapter } from './adapters/deepseek.js'
 import { hermesAdapter } from './adapters/hermes.js'
+import { contextWindowFor, costOf } from './models.js'
+import type { PricingTable } from './models.js'
 import { HARNESS_LABEL, mergeMetrics } from './types.js'
 import type { Adapter, HarnessId, Metrics, Row, Session, Trajectory } from './types.js'
 
@@ -27,11 +29,66 @@ export function discoverAll(adapters: readonly Adapter[]): Discovered[] {
   return found.sort((left, right) => right.session.modifiedAt - left.session.modifiedAt)
 }
 
+/**
+ * Collapse runs of identical rows.
+ *
+ * A stuck agent retrying, or a loop re-reading one file, otherwise fills the
+ * whole screen with the same line and hides everything before it.
+ */
+export function collapseRepeats(rows: readonly Row[]): Row[] {
+  const out: Row[] = []
+  for (const row of rows) {
+    const previous = out[out.length - 1]
+    if (previous !== undefined
+      && previous.kind === row.kind
+      && previous.label === row.label
+      && previous.text === row.text
+      && previous.harness === row.harness) {
+      previous.repeat = (previous.repeat ?? 1) + 1
+      continue
+    }
+    out.push({ ...row })
+  }
+  return out
+}
+
+/**
+ * Attach cost and, for agents that do not log one, a configured context window.
+ *
+ * A window the observed occupancy exceeds is discarded rather than clamped: a
+ * bar pinned at 100% because the configured capacity is wrong reads exactly
+ * like a context about to overflow, which is the one thing this gauge exists
+ * to warn about.
+ */
+function enrich(metrics: Metrics, pricing: PricingTable): Metrics {
+  const cost = costOf(metrics.model, metrics, pricing)
+  const configured = metrics.contextWindow ?? contextWindowFor(metrics.model, pricing)
+  const occupied = metrics.contextTokens
+  const window = configured !== undefined && occupied !== undefined && occupied > configured
+    ? undefined
+    : configured
+  return {
+    ...metrics,
+    ...cost === undefined ? {} : { costUsd: cost },
+    ...window === undefined ? { contextWindow: undefined } : { contextWindow: window },
+  }
+}
+
+/** How a feed is filtered before rendering. */
+export interface ReadOptions {
+  /** Include injected-context rows; they dominate the feed when shown. */
+  verbose: boolean
+  pricing: PricingTable
+}
+
 /** Read one session, tagging every row with its agent. */
-export function readTagged(entry: Discovered): Trajectory {
+export function readTagged(entry: Discovered, options: ReadOptions): Trajectory {
   const trajectory = entry.adapter.read(entry.session)
   const harness = HARNESS_LABEL[entry.session.harness]
-  return { metrics: trajectory.metrics, rows: trajectory.rows.map(row => ({ ...row, harness })) }
+  const tagged = trajectory.rows
+    .filter(row => options.verbose || row.kind !== 'context')
+    .map(row => ({ ...row, harness }))
+  return { metrics: enrich(trajectory.metrics, options.pricing), rows: collapseRepeats(tagged) }
 }
 
 /**
@@ -39,19 +96,25 @@ export function readTagged(entry: Discovered): Trajectory {
  * Rows are re-indexed after the merge so `#N` counts the unified feed rather
  * than repeating each source's own numbering.
  */
-export function mergeSessions(entries: readonly Discovered[], limit: number): Trajectory {
+export function mergeSessions(
+  entries: readonly Discovered[],
+  limit: number,
+  options: ReadOptions,
+): Trajectory {
   if (entries.length === 0) return { metrics: {}, rows: [] }
   const parts: Metrics[] = []
   const rows: Row[] = []
   for (const entry of entries) {
-    const trajectory = readTagged(entry)
+    const trajectory = readTagged(entry, options)
     parts.push(trajectory.metrics)
     rows.push(...trajectory.rows)
   }
   rows.sort((left, right) => left.time - right.time)
   return {
     metrics: mergeMetrics(parts),
-    rows: rows.slice(-limit).map((row, position) => ({ ...row, index: position + 1 })),
+    // Collapse again after interleaving: identical rows from one agent can be
+    // separated by another agent's rows before the merge sorts them together.
+    rows: collapseRepeats(rows).slice(-limit).map((row, position) => ({ ...row, index: position + 1 })),
   }
 }
 

@@ -69,7 +69,8 @@ function foldDocument(document, fallbackTime) {
                 break;
         }
     }
-    return { metrics: { turns, steps }, rows };
+    const model = typeof document['model'] === 'string' ? document['model'] : undefined;
+    return { metrics: { turns, steps, ...model === undefined ? {} : { model } }, rows };
 }
 /** Build the Hermes adapter. */
 export function hermesAdapter(root = hermesRoot()) {

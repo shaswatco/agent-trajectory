@@ -87,6 +87,7 @@ function foldLog(records: readonly Record<string, unknown>[]): Trajectory {
   let sawUsage = false
   let contextWindow: number | undefined
   let contextTokens: number | undefined
+  let model: string | undefined
 
   let stepStart: number | undefined
   let firstToken: number | undefined
@@ -204,6 +205,12 @@ function foldLog(records: readonly Record<string, unknown>[]): Trajectory {
       case 'request/context':
         contextWindow = numberAt(data, 'contextWindow') ?? contextWindow
         break
+      case 'request/header': {
+        const selection = recordAt(data, 'model') ?? data
+        const named = selection?.['model'] ?? selection?.['id']
+        if (typeof named === 'string') model = named
+        break
+      }
       default:
         // Chunks, policy records and boundary markers carry no row.
         break
@@ -222,6 +229,8 @@ function foldLog(records: readonly Record<string, unknown>[]): Trajectory {
     ...prompt > 0 ? { cacheHitRatio: cacheRead / prompt } : {},
     ...contextWindow === undefined ? {} : { contextWindow },
     ...contextTokens === undefined ? {} : { contextTokens },
+    ...sawUsage ? { cacheWriteTokens: cacheWrite } : {},
+    ...model === undefined ? {} : { model },
   }
   return { metrics, rows }
 }
