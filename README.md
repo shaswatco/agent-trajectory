@@ -20,7 +20,9 @@ ctx ███░░░░░░░░░░░░░░░░░░░░░░�
 ## Install
 
 ```bash
-npm install -g github:shaswatco/agent-trajectory
+git clone https://github.com/shaswatco/agent-trajectory.git
+cd agent-trajectory
+npm install -g .
 ```
 
 Then, from anywhere:
@@ -29,16 +31,14 @@ Then, from anywhere:
 atrajectory
 ```
 
-No configuration, no API keys, no setup. It finds your agents' session stores automatically and starts showing them.
+No configuration, no API keys, no setup. It finds your agents' session stores
+automatically and starts showing them.
 
-Try it without installing:
-
-```bash
-npx github:shaswatco/agent-trajectory
-```
-
-> Not on the npm registry yet, so install from GitHub for now. Once published,
-> `npm install -g agent-trajectory` will work the same way.
+> **Not on the npm registry yet.** `npm install -g agent-trajectory` will 404
+> until it is published. Installing straight from a git URL
+> (`npm install -g github:shaswatco/agent-trajectory`) is also unreliable: npm
+> links the package to a cache clone it then deletes, leaving a dangling bin.
+> Clone and install from the directory instead.
 
 ## What it shows
 
