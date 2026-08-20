@@ -9,7 +9,7 @@
  */
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { epochOf, flatten, modifiedAt, previewArguments, readText, recordAt, safeReaddir } from './util.js';
+import { cachedTrajectory, epochOf, flatten, modifiedAt, previewArguments, readText, recordAt, safeReaddir } from './util.js';
 /** Default session directory. */
 export function hermesRoot(env = process.env) {
     const configured = env['HERMES_HOME'];
@@ -70,7 +70,11 @@ function foldDocument(document, fallbackTime) {
         }
     }
     const model = typeof document['model'] === 'string' ? document['model'] : undefined;
-    return { metrics: { turns, steps, ...model === undefined ? {} : { model } }, rows };
+    return {
+        metrics: { turns, steps, ...model === undefined ? {} : { model } },
+        rows,
+        ...model === undefined ? {} : { title: model },
+    };
 }
 /** Build the Hermes adapter. */
 export function hermesAdapter(root = hermesRoot()) {
@@ -98,24 +102,27 @@ export function hermesAdapter(root = hermesRoot()) {
             return sessions;
         },
         read: (session) => {
-            const text = readText(session.path);
-            if (text === undefined)
-                return { metrics: {}, rows: [] };
-            let document;
-            try {
-                const parsed = JSON.parse(text);
-                if (typeof parsed !== 'object' || parsed === null)
+            const folded = cachedTrajectory(session.path, () => {
+                const text = readText(session.path);
+                if (text === undefined)
                     return { metrics: {}, rows: [] };
-                document = parsed;
-            }
-            catch {
-                // A whole-document format has no partial-read recovery: a save in
-                // flight yields invalid JSON, and the next poll reads it complete.
-                return { metrics: {}, rows: [] };
-            }
-            if (typeof document['model'] === 'string')
-                session.title = document['model'];
-            return foldDocument(document, session.modifiedAt);
+                let document;
+                try {
+                    const parsed = JSON.parse(text);
+                    if (typeof parsed !== 'object' || parsed === null)
+                        return { metrics: {}, rows: [] };
+                    document = parsed;
+                }
+                catch {
+                    // A whole-document format has no partial-read recovery: a save in
+                    // flight yields invalid JSON, and the next poll reads it complete.
+                    return { metrics: {}, rows: [] };
+                }
+                return foldDocument(document, session.modifiedAt);
+            });
+            if (folded.title !== undefined)
+                session.title = folded.title;
+            return { metrics: folded.metrics, rows: folded.rows };
         },
     };
 }

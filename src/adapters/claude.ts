@@ -12,7 +12,7 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
 import { isRealModel } from '../models.js'
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, readJsonlPrefix, safeReaddir } from './util.js'
+import { cachedTrajectory, epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, readJsonlPrefix, safeReaddir } from './util.js'
 
 /** Default transcript root. */
 export function claudeRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -183,6 +183,6 @@ export function claudeAdapter(root: string = claudeRoot()): Adapter {
       }
       return sessions
     },
-    read: (session: Session) => foldTranscript(readJsonl(session.path)),
+    read: (session: Session) => cachedTrajectory(session.path, () => foldTranscript(readJsonl(session.path))),
   }
 }

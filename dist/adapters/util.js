@@ -26,13 +26,12 @@ export function modifiedAt(path) {
         return undefined;
     }
 }
-/**
- * Parsed-content cache keyed by identity, so the poll loop re-parses only the
- * files that actually changed. Session logs are append-only and can reach
- * megabytes; re-reading every one of them each second is the difference
- * between an idle monitor and a warm laptop.
- */
-const cache = new Map();
+/** Parsed records are large; retain a modest working set rather than history. */
+const parsedCache = new Map();
+/** Folded trajectories are the hot poll-loop result and deserve their own LRU. */
+const trajectoryCache = new Map();
+/** Keep enough recent sessions for unified mode and the picker without retaining every log ever seen. */
+const CACHE_LIMIT = 24;
 /** Identity of a file for cache purposes, or undefined when unreadable. */
 function identity(path) {
     try {
@@ -44,22 +43,42 @@ function identity(path) {
         return undefined;
     }
 }
-/**
- * Return the cached parse for `path`, or compute and store one.
- * @param path - file whose parse is cached.
- * @param compute - parser run only when the file changed.
- * @returns the cached or freshly computed value.
- */
-export function cached(path, compute) {
+/** Cache a computed representation of one file until its identity changes. */
+function cachedIn(cache, path, compute) {
     const now = identity(path);
     const hit = cache.get(path);
     if (now !== undefined && hit !== undefined && hit.size === now.size && hit.mtime === now.mtime) {
+        // Map insertion order is our LRU order. Move a hit to the back so a
+        // recently inspected pinned session is not evicted by picker browsing.
+        cache.delete(path);
+        cache.set(path, hit);
         return hit.value;
     }
     const value = compute();
-    if (now !== undefined)
+    if (now !== undefined) {
         cache.set(path, { ...now, value });
+        while (cache.size > CACHE_LIMIT) {
+            const oldest = cache.keys().next().value;
+            if (oldest === undefined)
+                break;
+            cache.delete(oldest);
+        }
+    }
     return value;
+}
+/** Return a cached parsed representation of an artifact, invalidated by a write. */
+export function cached(path, compute) {
+    return cachedIn(parsedCache, path, compute);
+}
+/**
+ * Return a cached fully folded trajectory, invalidated by a write.
+ *
+ * Folding is more expensive than parsing for large logs, so this prevents the
+ * live monitor from walking every historic row on every tick. The dedicated,
+ * bounded cache avoids retaining an unbounded list of old session histories.
+ */
+export function cachedTrajectory(path, compute) {
+    return cachedIn(trajectoryCache, path, compute);
 }
 /** Read a file as text, or undefined when unreadable. */
 export function readText(path) {

@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { decodeZstdFrames, modifiedAt, numberAt, parseJsonl, previewArguments, readText, recordAt, safeReaddir } from './util.js';
+import { cachedTrajectory, decodeZstdFrames, modifiedAt, numberAt, parseJsonl, previewArguments, readText, recordAt, safeReaddir } from './util.js';
 /** Default sessions root. */
 export function deepseekRoot(env = process.env) {
     const home = env['DSH_HOME'];
@@ -272,14 +272,10 @@ export function deepseekAdapter(root = deepseekRoot()) {
             }
             return sessions;
         },
-        read: (session) => {
+        read: (session) => cachedTrajectory(session.path, () => {
             const records = readLog(session.path);
-            const [header, ...events] = records;
-            if (typeof header?.['cwd'] === 'string')
-                session.cwd = header['cwd'];
-            if (typeof header?.['title'] === 'string')
-                session.title = header['title'];
+            const [, ...events] = records;
             return foldLog(events);
-        },
+        }),
     };
 }

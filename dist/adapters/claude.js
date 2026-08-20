@@ -10,7 +10,7 @@
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { isRealModel } from '../models.js';
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, readJsonlPrefix, safeReaddir } from './util.js';
+import { cachedTrajectory, epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, readJsonlPrefix, safeReaddir } from './util.js';
 /** Default transcript root. */
 export function claudeRoot(env = process.env) {
     const configured = env['CLAUDE_CONFIG_DIR'];
@@ -170,6 +170,6 @@ export function claudeAdapter(root = claudeRoot()) {
             }
             return sessions;
         },
-        read: (session) => foldTranscript(readJsonl(session.path)),
+        read: (session) => cachedTrajectory(session.path, () => foldTranscript(readJsonl(session.path))),
     };
 }

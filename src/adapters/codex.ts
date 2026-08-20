@@ -14,7 +14,7 @@
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
-import { epochOf, flatten, jsonlFilesUnder, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js'
+import { cachedTrajectory, epochOf, flatten, jsonlFilesUnder, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js'
 
 /** Codex home; rollouts live in two directories under it. */
 export function codexHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -183,7 +183,7 @@ export function codexAdapter(roots: readonly string[] = codexRoots()): Adapter {
       return sessions
     },
     read: (session: Session) => {
-      const folded = foldRollout(readJsonl(session.path))
+      const folded = cachedTrajectory(session.path, () => foldRollout(readJsonl(session.path)))
       if (folded.cwd !== undefined) session.cwd = folded.cwd
       return { metrics: folded.metrics, rows: folded.rows }
     },

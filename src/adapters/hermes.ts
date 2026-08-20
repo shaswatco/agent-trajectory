@@ -11,7 +11,12 @@
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Row, Session, Trajectory } from '../types.js'
-import { epochOf, flatten, modifiedAt, previewArguments, readText, recordAt, safeReaddir } from './util.js'
+import { cachedTrajectory, epochOf, flatten, modifiedAt, previewArguments, readText, recordAt, safeReaddir } from './util.js'
+
+/** A folded document retains its recorded model for session display. */
+interface FoldedDocument extends Trajectory {
+  title?: string
+}
 
 /** Default session directory. */
 export function hermesRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -21,7 +26,7 @@ export function hermesRoot(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** Fold one session document into rows and figures. */
-function foldDocument(document: Record<string, unknown>, fallbackTime: number): Trajectory {
+function foldDocument(document: Record<string, unknown>, fallbackTime: number): FoldedDocument {
   const rows: Row[] = []
   const messages = Array.isArray(document['messages']) ? document['messages'] : []
   const time = epochOf(document['last_updated']) ?? fallbackTime
@@ -72,7 +77,11 @@ function foldDocument(document: Record<string, unknown>, fallbackTime: number): 
   }
 
   const model = typeof document['model'] === 'string' ? document['model'] : undefined
-  return { metrics: { turns, steps, ...model === undefined ? {} : { model } }, rows }
+  return {
+    metrics: { turns, steps, ...model === undefined ? {} : { model } },
+    rows,
+    ...model === undefined ? {} : { title: model },
+  }
 }
 
 /** Build the Hermes adapter. */
@@ -99,20 +108,23 @@ export function hermesAdapter(root: string = hermesRoot()): Adapter {
       return sessions
     },
     read: (session: Session) => {
-      const text = readText(session.path)
-      if (text === undefined) return { metrics: {}, rows: [] }
-      let document: Record<string, unknown>
-      try {
-        const parsed: unknown = JSON.parse(text)
-        if (typeof parsed !== 'object' || parsed === null) return { metrics: {}, rows: [] }
-        document = parsed as Record<string, unknown>
-      } catch {
-        // A whole-document format has no partial-read recovery: a save in
-        // flight yields invalid JSON, and the next poll reads it complete.
-        return { metrics: {}, rows: [] }
-      }
-      if (typeof document['model'] === 'string') session.title = document['model'] as string
-      return foldDocument(document, session.modifiedAt)
+      const folded = cachedTrajectory(session.path, (): FoldedDocument => {
+        const text = readText(session.path)
+        if (text === undefined) return { metrics: {}, rows: [] }
+        let document: Record<string, unknown>
+        try {
+          const parsed: unknown = JSON.parse(text)
+          if (typeof parsed !== 'object' || parsed === null) return { metrics: {}, rows: [] }
+          document = parsed as Record<string, unknown>
+        } catch {
+          // A whole-document format has no partial-read recovery: a save in
+          // flight yields invalid JSON, and the next poll reads it complete.
+          return { metrics: {}, rows: [] }
+        }
+        return foldDocument(document, session.modifiedAt)
+      })
+      if (folded.title !== undefined) session.title = folded.title
+      return { metrics: folded.metrics, rows: folded.rows }
     },
   }
 }

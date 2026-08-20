@@ -12,7 +12,7 @@
  */
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { epochOf, flatten, jsonlFilesUnder, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js';
+import { cachedTrajectory, epochOf, flatten, jsonlFilesUnder, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js';
 /** Codex home; rollouts live in two directories under it. */
 export function codexHome(env = process.env) {
     const configured = env['CODEX_HOME'];
@@ -175,7 +175,7 @@ export function codexAdapter(roots = codexRoots()) {
             return sessions;
         },
         read: (session) => {
-            const folded = foldRollout(readJsonl(session.path));
+            const folded = cachedTrajectory(session.path, () => foldRollout(readJsonl(session.path)));
             if (folded.cwd !== undefined)
                 session.cwd = folded.cwd;
             return { metrics: folded.metrics, rows: folded.rows };

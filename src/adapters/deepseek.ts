@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
-import { decodeZstdFrames, modifiedAt, numberAt, parseJsonl, previewArguments, readText, recordAt, safeReaddir } from './util.js'
+import { cachedTrajectory, decodeZstdFrames, modifiedAt, numberAt, parseJsonl, previewArguments, readText, recordAt, safeReaddir } from './util.js'
 
 /** Default sessions root. */
 export function deepseekRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -274,12 +274,10 @@ export function deepseekAdapter(root: string = deepseekRoot()): Adapter {
       }
       return sessions
     },
-    read: (session: Session) => {
+    read: (session: Session) => cachedTrajectory(session.path, () => {
       const records = readLog(session.path)
-      const [header, ...events] = records
-      if (typeof header?.['cwd'] === 'string') session.cwd = header['cwd'] as string
-      if (typeof header?.['title'] === 'string') session.title = header['title'] as string
+      const [, ...events] = records
       return foldLog(events)
-    },
+    }),
   }
 }
