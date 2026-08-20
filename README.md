@@ -1,6 +1,7 @@
 # 🛰️ Agent Trajectory
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/shaswatco/agent-trajectory/actions/workflows/ci.yml/badge.svg)](https://github.com/shaswatco/agent-trajectory/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.15-brightgreen.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Agents](https://img.shields.io/badge/agents-claude%20%7C%20codex%20%7C%20deepseek%20%7C%20hermes-8957e5.svg)](#-agent-coverage)
