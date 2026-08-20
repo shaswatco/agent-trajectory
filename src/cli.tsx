@@ -2,6 +2,7 @@
 /** `atrajectory` entry: poll every agent's session store and render the feed. */
 
 import { render } from 'ink'
+import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import React from 'react'
@@ -270,7 +271,19 @@ async function main(argv: readonly string[]): Promise<void> {
   }
 }
 
+/**
+ * Run only when this module is the program entry.
+ *
+ * Both sides must be symlink-resolved. Node reports `import.meta.url` as the
+ * real path, while `argv[1]` keeps whatever path invoked us — and a global
+ * install is reached through two symlinks (the bin, and the package directory
+ * when installed from a local path). Comparing an unresolved `argv[1]` made
+ * every installed invocation a silent no-op.
+ */
 const entry = process.argv[1]
-if (entry !== undefined && import.meta.url === pathToFileURL(resolve(entry)).href) {
+const entryUrl = entry === undefined
+  ? undefined
+  : pathToFileURL(realpathSync(resolve(entry))).href
+if (entryUrl !== undefined && import.meta.url === entryUrl) {
   await main(process.argv.slice(2))
 }

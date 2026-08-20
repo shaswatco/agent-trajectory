@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { claudeAdapter } from '../dist/adapters/claude.js'
 import { codexAdapter } from '../dist/adapters/codex.js'
@@ -126,4 +127,21 @@ test('a session that switches models with aggregated usage does not report a fal
     pricing: { 'model-a': { input: 1 }, 'model-b': { input: 10 } },
   })
   assert.equal(trajectory.metrics.costUsd, undefined)
+})
+
+test('the CLI still runs when reached through a symlink, as a global install is', () => {
+  // A global install resolves through symlinks (the bin, and the package
+  // directory when installed from a local path). Node reports import.meta.url
+  // as the real path, so an entry guard comparing an unresolved argv[1] makes
+  // every installed invocation a silent no-op.
+  const home = mkdtempSync(join(tmpdir(), 'atrajectory-bin-'))
+  try {
+    const link = join(home, 'cli.js')
+    symlinkSync(new URL('../dist/cli.js', import.meta.url).pathname, link)
+    const run = spawnSync(process.execPath, [link, '--version'], { encoding: 'utf8' })
+    assert.equal(run.status, 0)
+    assert.match(run.stdout, /\d+\.\d+\.\d+/)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 })
