@@ -14,7 +14,7 @@
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, numberAt, readJsonl, recordAt } from './util.js'
+import { epochOf, flatten, jsonlFilesIn, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js'
 
 /** Codex home; rollouts live in two directories under it. */
 export function codexHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -30,6 +30,16 @@ export function codexRoots(home: string = codexHome()): string[] {
 /** A folded rollout, plus the cwd its metadata records. */
 interface FoldedRollout extends Trajectory {
   cwd?: string
+}
+
+/** Cwd recorded by session metadata near the start of each rollout. */
+function cwdOf(path: string): string | undefined {
+  for (const record of readJsonlPrefix(path)) {
+    const payload = recordAt(record, 'payload')
+    const cwd = payload?.['cwd']
+    if (typeof cwd === 'string') return cwd
+  }
+  return undefined
 }
 
 /** Fold one rollout into rows and figures. */
@@ -157,7 +167,14 @@ export function codexAdapter(roots: readonly string[] = codexRoots()): Adapter {
           if (!name.startsWith('rollout-')) continue
           const time = modifiedAt(path)
           if (time === undefined) continue
-          sessions.push({ harness: 'codex', id: name.replace(/^rollout-/, ''), path, modifiedAt: time })
+          const cwd = cwdOf(path)
+          sessions.push({
+            harness: 'codex',
+            id: name.replace(/^rollout-/, ''),
+            path,
+            modifiedAt: time,
+            ...cwd === undefined ? {} : { cwd },
+          })
         }
       }
       return sessions

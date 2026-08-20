@@ -25,9 +25,17 @@ export function deepseekRoot(env: NodeJS.ProcessEnv = process.env): string {
   return join(base, 'sessions')
 }
 
-/** Decode a workspace directory name back into a path. */
-function decodeWorkspace(encoded: string): string {
-  return `/${encoded.replace(/^-+|-+$/g, '').replaceAll('-', '/')}`
+/** Read the durable header, which owns the exact workspace cwd. */
+function headerOf(path: string): Record<string, unknown> | undefined {
+  if (!path.endsWith('.zstd')) return parseJsonl(readText(path) ?? '')[0]
+  let buffer: Buffer
+  try {
+    buffer = readFileSync(path)
+  } catch {
+    // Deleted or unreadable between discovery and metadata read.
+    return undefined
+  }
+  return parseJsonl(decodeZstdFrames(buffer, 1))[0]
 }
 
 /** Read a log artifact, decompressing when it is Zstandard-framed. */
@@ -243,14 +251,23 @@ export function deepseekAdapter(root: string = deepseekRoot()): Adapter {
     discover: () => {
       const sessions: Session[] = []
       for (const workspace of safeReaddir(root)) {
-        const cwd = decodeWorkspace(workspace)
         for (const id of safeReaddir(join(root, workspace))) {
           if (!id.startsWith('session-')) continue
           for (const suffix of ['session.jsonl.zstd', 'session.jsonl']) {
             const path = join(root, workspace, id, suffix)
             const time = modifiedAt(path)
             if (time === undefined) continue
-            sessions.push({ harness: 'deepseek', id, path, cwd, modifiedAt: time })
+            const header = headerOf(path)
+            const cwd = typeof header?.['cwd'] === 'string' ? header['cwd'] : undefined
+            const title = typeof header?.['title'] === 'string' ? header['title'] : undefined
+            sessions.push({
+              harness: 'deepseek',
+              id,
+              path,
+              modifiedAt: time,
+              ...cwd === undefined ? {} : { cwd },
+              ...title === undefined ? {} : { title },
+            })
             break
           }
         }

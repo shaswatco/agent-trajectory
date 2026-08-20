@@ -12,7 +12,7 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
 import { isRealModel } from '../models.js'
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, safeReaddir } from './util.js'
+import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, readJsonlPrefix, safeReaddir } from './util.js'
 
 /** Default transcript root. */
 export function claudeRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -21,9 +21,11 @@ export function claudeRoot(env: NodeJS.ProcessEnv = process.env): string {
   return join(base, 'projects')
 }
 
-/** Recover a working directory from Claude's dash-encoded project directory. */
-function decodeProject(encoded: string): string {
-  return `/${encoded.replace(/^-+/, '').replaceAll('-', '/')}`
+/** Cwd recorded in the first metadata-bearing transcript record. */
+function cwdOf(path: string): string | undefined {
+  return readJsonlPrefix(path)
+    .map(record => record['cwd'])
+    .find((value): value is string => typeof value === 'string')
 }
 
 /** Prompt-side and output buckets of one assistant record. */
@@ -166,11 +168,17 @@ export function claudeAdapter(root: string = claudeRoot()): Adapter {
     discover: () => {
       const sessions: Session[] = []
       for (const project of safeReaddir(root)) {
-        const cwd = decodeProject(project)
         for (const path of jsonlFilesIn(join(root, project))) {
           const time = modifiedAt(path)
           if (time === undefined) continue
-          sessions.push({ harness: 'claude', id: basename(path, '.jsonl'), path, cwd, modifiedAt: time })
+          const cwd = cwdOf(path)
+          sessions.push({
+            harness: 'claude',
+            id: basename(path, '.jsonl'),
+            path,
+            modifiedAt: time,
+            ...cwd === undefined ? {} : { cwd },
+          })
         }
       }
       return sessions

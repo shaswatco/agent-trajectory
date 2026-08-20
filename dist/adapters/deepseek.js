@@ -21,9 +21,19 @@ export function deepseekRoot(env = process.env) {
     const base = home !== undefined && home.trim().length > 0 ? home : join(homedir(), '.dsh');
     return join(base, 'sessions');
 }
-/** Decode a workspace directory name back into a path. */
-function decodeWorkspace(encoded) {
-    return `/${encoded.replace(/^-+|-+$/g, '').replaceAll('-', '/')}`;
+/** Read the durable header, which owns the exact workspace cwd. */
+function headerOf(path) {
+    if (!path.endsWith('.zstd'))
+        return parseJsonl(readText(path) ?? '')[0];
+    let buffer;
+    try {
+        buffer = readFileSync(path);
+    }
+    catch {
+        // Deleted or unreadable between discovery and metadata read.
+        return undefined;
+    }
+    return parseJsonl(decodeZstdFrames(buffer, 1))[0];
 }
 /** Read a log artifact, decompressing when it is Zstandard-framed. */
 function readLog(path) {
@@ -237,7 +247,6 @@ export function deepseekAdapter(root = deepseekRoot()) {
         discover: () => {
             const sessions = [];
             for (const workspace of safeReaddir(root)) {
-                const cwd = decodeWorkspace(workspace);
                 for (const id of safeReaddir(join(root, workspace))) {
                     if (!id.startsWith('session-'))
                         continue;
@@ -246,7 +255,17 @@ export function deepseekAdapter(root = deepseekRoot()) {
                         const time = modifiedAt(path);
                         if (time === undefined)
                             continue;
-                        sessions.push({ harness: 'deepseek', id, path, cwd, modifiedAt: time });
+                        const header = headerOf(path);
+                        const cwd = typeof header?.['cwd'] === 'string' ? header['cwd'] : undefined;
+                        const title = typeof header?.['title'] === 'string' ? header['title'] : undefined;
+                        sessions.push({
+                            harness: 'deepseek',
+                            id,
+                            path,
+                            modifiedAt: time,
+                            ...cwd === undefined ? {} : { cwd },
+                            ...title === undefined ? {} : { title },
+                        });
                         break;
                     }
                 }

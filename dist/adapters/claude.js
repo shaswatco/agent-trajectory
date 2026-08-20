@@ -10,16 +10,18 @@
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { isRealModel } from '../models.js';
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, safeReaddir } from './util.js';
+import { epochOf, flatten, jsonlFilesIn, modifiedAt, previewArguments, readJsonl, readJsonlPrefix, safeReaddir } from './util.js';
 /** Default transcript root. */
 export function claudeRoot(env = process.env) {
     const configured = env['CLAUDE_CONFIG_DIR'];
     const base = configured !== undefined && configured.trim().length > 0 ? configured : join(homedir(), '.claude');
     return join(base, 'projects');
 }
-/** Recover a working directory from Claude's dash-encoded project directory. */
-function decodeProject(encoded) {
-    return `/${encoded.replace(/^-+/, '').replaceAll('-', '/')}`;
+/** Cwd recorded in the first metadata-bearing transcript record. */
+function cwdOf(path) {
+    return readJsonlPrefix(path)
+        .map(record => record['cwd'])
+        .find((value) => typeof value === 'string');
 }
 /** Read `message.usage`, when present. */
 function usageOf(message) {
@@ -152,12 +154,18 @@ export function claudeAdapter(root = claudeRoot()) {
         discover: () => {
             const sessions = [];
             for (const project of safeReaddir(root)) {
-                const cwd = decodeProject(project);
                 for (const path of jsonlFilesIn(join(root, project))) {
                     const time = modifiedAt(path);
                     if (time === undefined)
                         continue;
-                    sessions.push({ harness: 'claude', id: basename(path, '.jsonl'), path, cwd, modifiedAt: time });
+                    const cwd = cwdOf(path);
+                    sessions.push({
+                        harness: 'claude',
+                        id: basename(path, '.jsonl'),
+                        path,
+                        modifiedAt: time,
+                        ...cwd === undefined ? {} : { cwd },
+                    });
                 }
             }
             return sessions;

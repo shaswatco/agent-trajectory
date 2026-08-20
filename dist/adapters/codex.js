@@ -12,7 +12,7 @@
  */
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, numberAt, readJsonl, recordAt } from './util.js';
+import { epochOf, flatten, jsonlFilesIn, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js';
 /** Codex home; rollouts live in two directories under it. */
 export function codexHome(env = process.env) {
     const configured = env['CODEX_HOME'];
@@ -21,6 +21,16 @@ export function codexHome(env = process.env) {
 /** Directories holding rollout files. */
 export function codexRoots(home = codexHome()) {
     return [join(home, 'sessions'), join(home, 'archived_sessions')];
+}
+/** Cwd recorded by session metadata near the start of each rollout. */
+function cwdOf(path) {
+    for (const record of readJsonlPrefix(path)) {
+        const payload = recordAt(record, 'payload');
+        const cwd = payload?.['cwd'];
+        if (typeof cwd === 'string')
+            return cwd;
+    }
+    return undefined;
 }
 /** Fold one rollout into rows and figures. */
 function foldRollout(records) {
@@ -149,7 +159,14 @@ export function codexAdapter(roots = codexRoots()) {
                     const time = modifiedAt(path);
                     if (time === undefined)
                         continue;
-                    sessions.push({ harness: 'codex', id: name.replace(/^rollout-/, ''), path, modifiedAt: time });
+                    const cwd = cwdOf(path);
+                    sessions.push({
+                        harness: 'codex',
+                        id: name.replace(/^rollout-/, ''),
+                        path,
+                        modifiedAt: time,
+                        ...cwd === undefined ? {} : { cwd },
+                    });
                 }
             }
             return sessions;

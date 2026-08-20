@@ -2,7 +2,7 @@
  * Filesystem and decoding helpers shared by the adapters. No dependencies:
  * Zstandard comes from `node:zlib` on Node 22.15+.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { zstdDecompressSync } from 'node:zlib';
 /** Directory entries, or an empty list when the directory is absent. */
@@ -72,6 +72,31 @@ export function readText(path) {
         return undefined;
     }
 }
+/**
+ * Read the start of a text file without retaining or parsing its full body.
+ *
+ * Session metadata appears in the first records for Claude Code and Codex.
+ * Discovery uses this bounded read so cwd filtering does not have to derive a
+ * path from a lossy directory-name encoding or parse every full transcript.
+ */
+export function readTextPrefix(path, bytes = 131_072) {
+    let descriptor;
+    try {
+        descriptor = openSync(path, 'r');
+        const buffer = Buffer.allocUnsafe(bytes);
+        const read = readSync(descriptor, buffer, 0, bytes, 0);
+        return buffer.subarray(0, read).toString('utf8');
+    }
+    catch {
+        // The writer may have removed or rotated the artifact between discovery
+        // and its metadata read. Treat it as unavailable for this poll.
+        return undefined;
+    }
+    finally {
+        if (descriptor !== undefined)
+            closeSync(descriptor);
+    }
+}
 /** Every `*.jsonl` directly under `dir`. */
 export function jsonlFilesIn(dir) {
     return safeReaddir(dir).filter(name => name.endsWith('.jsonl')).map(name => join(dir, name));
@@ -101,6 +126,15 @@ export function readJsonl(path) {
         return text === undefined ? [] : parseJsonl(text);
     });
 }
+/** Parse the complete JSONL lines in one bounded file prefix. */
+export function readJsonlPrefix(path) {
+    const text = readTextPrefix(path);
+    if (text === undefined)
+        return [];
+    // The final line can be cut mid-record, and parseJsonl deliberately ignores
+    // that same live-writer condition.
+    return parseJsonl(text);
+}
 /** Zstandard frame magic (little-endian 0xFD2FB528). */
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 /**
@@ -112,7 +146,7 @@ const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
  * boundary and retried; a frame that never decodes is a torn tail from a
  * writer mid-append and is skipped, not an error.
  */
-export function decodeZstdFrames(buffer) {
+export function decodeZstdFrames(buffer, maxFrames = Number.POSITIVE_INFINITY) {
     const offsets = [];
     for (let at = buffer.indexOf(ZSTD_MAGIC, 0); at !== -1; at = buffer.indexOf(ZSTD_MAGIC, at + 4)) {
         offsets.push(at);
@@ -142,6 +176,8 @@ export function decodeZstdFrames(buffer) {
             break;
         parts.push(decoded);
         cursor = consumedThrough;
+        if (parts.length >= maxFrames)
+            break;
     }
     return parts.join('');
 }
