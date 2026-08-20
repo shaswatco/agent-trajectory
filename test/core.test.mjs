@@ -7,7 +7,7 @@ import test from 'node:test'
 import { claudeAdapter } from '../dist/adapters/claude.js'
 import { codexAdapter } from '../dist/adapters/codex.js'
 import { cachedTrajectory } from '../dist/adapters/util.js'
-import { adjustedFromEnd } from '../dist/app.js'
+import { activityTreemap, adjustedFromEnd } from '../dist/app.js'
 import { parseOptions } from '../dist/cli.js'
 import { readTagged, selectUnifiedSessions, underCwd } from '../dist/registry.js'
 import { mergeMetrics } from '../dist/types.js'
@@ -98,6 +98,18 @@ test('a paused scroll position stays on the same top row as new activity arrives
   assert.equal(adjustedFromEnd(30, 90, 100), 40)
   assert.equal(100 - 40, 60)
   assert.equal(adjustedFromEnd(0, 90, 100), 0)
+})
+
+test('the activity treemap expands collapsed rows and groups them by harness and kind', () => {
+  const cells = activityTreemap([
+    { index: 1, kind: 'tool', label: 'exec', text: 'git status', time: 1, harness: 'codex', repeat: 3 },
+    { index: 2, kind: 'assistant', label: 'assistant', text: 'done', time: 2, harness: 'claude' },
+    { index: 3, kind: 'error', label: 'client', text: 'expired', time: 3, harness: 'claude', repeat: 2 },
+  ])
+  assert.deepEqual(cells, [
+    { harness: 'claude', events: 3, kinds: { assistant: 1, error: 2 } },
+    { harness: 'codex', events: 3, kinds: { tool: 3 } },
+  ])
 })
 
 test('JSON mode is explicit and malformed options fail before starting the monitor', () => {

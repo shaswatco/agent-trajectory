@@ -10,7 +10,9 @@ import { loadPricing, pricingPath } from './models.js';
 import { allAdapters, discoverAll, mergeSessions, readTagged, selectUnifiedSessions, underCwd } from './registry.js';
 import { HARNESS_IDS } from './types.js';
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
-const CHROME_ROWS = 6;
+const BASE_CHROME_ROWS = 6;
+/** Rows used by the optional treemap (label plus two-line bordered cells). */
+const TREEMAP_ROWS = 5;
 const HELP = `
 agent trajectory — watch what your AI coding agents are doing, in the terminal
 
@@ -36,6 +38,7 @@ Options
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
+  t toggle activity treemap
   wheel or ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume live)
 
 Costs need a price table; free-tier models are recognised automatically and
@@ -179,6 +182,7 @@ function Monitor({ options }) {
     const adapters = React.useMemo(() => allAdapters().filter(adapter => options.harnesses.includes(adapter.id)), [options]);
     const [rows, setRows] = React.useState(process.stdout.rows ?? 24);
     const [pinned, setPinned] = React.useState(options.pinned);
+    const [showTreemap, setShowTreemap] = React.useState(true);
     const [view, setView] = React.useState(() => snapshot(options, adapters, options.pinned));
     const [tick, setTick] = React.useState(0);
     // Ink does not re-render on resize by itself, and a stale viewport height
@@ -200,10 +204,12 @@ function Monitor({ options }) {
     return React.createElement(App, {
         snapshot: view,
         tick,
-        feedRows: Math.max(4, rows - CHROME_ROWS),
+        feedRows: Math.max(4, rows - BASE_CHROME_ROWS - (showTreemap ? TREEMAP_ROWS : 0)),
         mouse: options.mouse,
+        showTreemap,
         onUnify: () => { setPinned(undefined); },
         onSelect: (path) => { setPinned(path); },
+        onToggleTreemap: () => { setShowTreemap(current => !current); },
     });
 }
 /** Run the command line interface when this module is the program entry point. */

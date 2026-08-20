@@ -111,6 +111,7 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `q` | quit |
 | `s` | toggle the session picker |
 | `u` | return to the unified feed |
+| `t` | toggle the activity treemap |
 | `0`–`9` | jump to that session |
 | wheel | scroll three rows |
 | `↑` `↓` / `k` `j` | scroll one row |
@@ -165,6 +166,8 @@ provider prefixes and deployment suffixes, so `z-ai/glm-4.5-air:free`,
 The top line names the view and counts sessions per agent. Unified mode takes the newest session from every active agent first, then fills remaining `--merge` slots by recency, so a busy background Claude session cannot hide Codex, DeepSeek, or Hermes activity.
 
 Below it, the metrics strip, then the context gauge — green under 70%, yellow past that, red past 90%. A context gauge always belongs to one request; when the feed combines several sessions it shows `mixed sessions; select one` rather than pairing an occupancy value from one session with a window from another.
+
+The activity treemap sits below the gauge. Its harness cells are sized by the recorded events in the displayed feed, and each cell breaks down prompts (`›`), responses (`✎`), tool calls (`⚙`), and failures (`✖`). It expands collapsed repeats, so a `×7` retry counts as seven events. Press `t` to hide it when you need more vertical room.
 
 Each feed row is one event:
 

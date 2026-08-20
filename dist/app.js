@@ -15,6 +15,26 @@ export function adjustedFromEnd(fromEnd, previousMaxOffset, nextMaxOffset) {
         return 0;
     return Math.min(nextMaxOffset, Math.max(0, fromEnd + nextMaxOffset - previousMaxOffset));
 }
+/**
+ * Group the rendered activity feed into harness cells for the treemap.
+ *
+ * The map deliberately uses visible event rows, not tokens or estimated cost:
+ * every adapter supplies rows, while token accounting is uneven across them.
+ */
+export function activityTreemap(rows) {
+    const grouped = new Map();
+    for (const row of rows) {
+        const harness = row.harness ?? 'unknown';
+        const count = row.repeat ?? 1;
+        const current = grouped.get(harness) ?? { events: 0, kinds: {} };
+        current.events += count;
+        current.kinds[row.kind] = (current.kinds[row.kind] ?? 0) + count;
+        grouped.set(harness, current);
+    }
+    return [...grouped]
+        .map(([harness, values]) => ({ harness, ...values }))
+        .sort((left, right) => right.events - left.events || left.harness.localeCompare(right.harness));
+}
 const KIND_COLOR = {
     user: 'cyan',
     context: 'gray',
@@ -106,6 +126,19 @@ function ContextGauge({ metrics, width }) {
     const color = ratio > 0.9 ? 'red' : ratio > 0.7 ? 'yellow' : 'green';
     return (_jsxs(Text, { wrap: "truncate", children: [_jsx(Text, { color: "gray", children: "ctx " }), _jsx(Text, { color: color, children: '█'.repeat(filled) }), _jsx(Text, { color: "gray", children: '░'.repeat(barWidth - filled) }), _jsx(Text, { color: "gray", children: ` ${(ratio * 100).toFixed(0)}% · ${tokens(contextTokens)}/${tokens(contextWindow)}` })] }));
 }
+/** Treemap-style overview of which harnesses produced the displayed activity. */
+function ActivityTreemap({ rows, width }) {
+    const cells = activityTreemap(rows);
+    if (cells.length === 0)
+        return null;
+    const total = cells.reduce((sum, cell) => sum + cell.events, 0);
+    return (_jsxs(Box, { flexDirection: "column", width: width, height: 5, children: [_jsx(Text, { color: "gray", wrap: "truncate", children: `activity map · ${String(total)} events · t hide` }), _jsx(Box, { flexDirection: "row", height: 4, children: cells.map(cell => {
+                    const breakdown = Object.entries(cell.kinds)
+                        .map(([kind, count]) => `${KIND_GLYPH[kind]}${String(count)}`)
+                        .join(' ');
+                    return (_jsxs(Box, { borderStyle: "single", borderColor: HARNESS_COLOR[cell.harness] ?? 'gray', flexDirection: "column", flexGrow: cell.events, flexBasis: 0, overflow: "hidden", children: [_jsx(Text, { color: HARNESS_COLOR[cell.harness] ?? 'gray', wrap: "truncate", children: `${cell.harness} ${String(cell.events)}` }), _jsx(Text, { color: "gray", wrap: "truncate", children: breakdown })] }, cell.harness));
+                }) })] }));
+}
 /** One activity row, held to a single terminal line. */
 function FeedLine({ row, width, showHarness, now }) {
     const duration = row.durationMs === undefined ? '' : ` ${seconds(row.durationMs)}`;
@@ -130,7 +163,7 @@ function SessionPicker({ sessions, pinned }) {
             })] }));
 }
 /** The monitor application. */
-export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }) {
+export function App({ snapshot, tick, feedRows, mouse, showTreemap, onUnify, onSelect, onToggleTreemap }) {
     const { exit } = useApp();
     const [pickerOpen, setPickerOpen] = React.useState(false);
     const width = process.stdout.columns ?? 100;
@@ -205,6 +238,8 @@ export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }) {
             onUnify();
             setPickerOpen(false);
         }
+        if (input === 't')
+            onToggleTreemap();
         if (key.upArrow || input === 'k')
             scrollBy(1);
         if (key.downArrow || input === 'j')
@@ -236,8 +271,8 @@ export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }) {
     }
     const sources = [...counts].map(([label, total]) => `${label} ${String(total)}`).join(' · ');
     return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsxs(Text, { bold: true, color: "magenta", wrap: "truncate", children: [_jsx(Text, { color: "green", children: `${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} ` }), snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'] }), _jsx(Text, { color: "gray", children: following
-                            ? `q quit · s sessions · ${mouse ? 'wheel' : '↑'} scroll`
-                            : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live` })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
+                            ? `q quit · s sessions · t ${showTreemap ? 'map off' : 'map'} · ${mouse ? 'wheel' : '↑'} scroll`
+                            : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live` })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), showTreemap ? _jsx(ActivityTreemap, { rows: snapshot.rows, width: width }) : null, _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
                     ? _jsx(Text, { color: "red", children: snapshot.error })
                     : snapshot.rows.length === 0
                         ? _jsx(Text, { color: "gray", children: "no activity recorded yet" })

@@ -36,14 +36,48 @@ export interface AppProps {
   feedRows: number
   /** Report wheel events for scrolling; disabling restores drag-to-select. */
   mouse: boolean
+  /** Whether the activity treemap is visible. */
+  showTreemap: boolean
   onUnify: () => void
   onSelect: (path: string) => void
+  onToggleTreemap: () => void
+}
+
+/** One harness cell in the activity treemap. */
+export interface TreemapCell {
+  /** Rendered harness label stamped on rows. */
+  harness: string
+  /** Event count after expanding collapsed repeats. */
+  events: number
+  /** Event count by rendered kind. */
+  kinds: Readonly<Partial<Record<RowKind, number>>>
 }
 
 /** Keep a paused viewport on the same top row when the feed grows or resizes. */
 export function adjustedFromEnd(fromEnd: number, previousMaxOffset: number, nextMaxOffset: number): number {
   if (fromEnd === 0) return 0
   return Math.min(nextMaxOffset, Math.max(0, fromEnd + nextMaxOffset - previousMaxOffset))
+}
+
+/**
+ * Group the rendered activity feed into harness cells for the treemap.
+ *
+ * The map deliberately uses visible event rows, not tokens or estimated cost:
+ * every adapter supplies rows, while token accounting is uneven across them.
+ */
+export function activityTreemap(rows: readonly Row[]): TreemapCell[] {
+  const grouped = new Map<string, { events: number; kinds: Partial<Record<RowKind, number>> }>()
+  for (const row of rows) {
+    const harness = row.harness ?? 'unknown'
+    const count = row.repeat ?? 1
+    const current = grouped.get(harness) ?? { events: 0, kinds: {} }
+    current.events += count
+    current.kinds[row.kind] = (current.kinds[row.kind] ?? 0) + count
+    grouped.set(harness, current)
+  }
+  return [...grouped]
+    .map(([harness, values]) => ({ harness, ...values }))
+    .sort((left, right) => right.events - left.events || left.harness.localeCompare(right.harness))
 }
 
 const KIND_COLOR: Record<RowKind, string> = {
@@ -152,6 +186,41 @@ function ContextGauge({ metrics, width }: { metrics: Metrics; width: number }): 
   )
 }
 
+/** Treemap-style overview of which harnesses produced the displayed activity. */
+function ActivityTreemap({ rows, width }: { rows: readonly Row[]; width: number }): React.ReactElement | null {
+  const cells = activityTreemap(rows)
+  if (cells.length === 0) return null
+  const total = cells.reduce((sum, cell) => sum + cell.events, 0)
+  return (
+    <Box flexDirection="column" width={width} height={5}>
+      <Text color="gray" wrap="truncate">{`activity map · ${String(total)} events · t hide`}</Text>
+      <Box flexDirection="row" height={4}>
+        {cells.map(cell => {
+          const breakdown = Object.entries(cell.kinds)
+            .map(([kind, count]) => `${KIND_GLYPH[kind as RowKind]}${String(count)}`)
+            .join(' ')
+          return (
+            <Box
+              key={cell.harness}
+              borderStyle="single"
+              borderColor={HARNESS_COLOR[cell.harness] ?? 'gray'}
+              flexDirection="column"
+              flexGrow={cell.events}
+              flexBasis={0}
+              overflow="hidden"
+            >
+              <Text color={HARNESS_COLOR[cell.harness] ?? 'gray'} wrap="truncate">
+                {`${cell.harness} ${String(cell.events)}`}
+              </Text>
+              <Text color="gray" wrap="truncate">{breakdown}</Text>
+            </Box>
+          )
+        })}
+      </Box>
+    </Box>
+  )
+}
+
 /** One activity row, held to a single terminal line. */
 function FeedLine({ row, width, showHarness, now }: {
   row: Row
@@ -211,7 +280,7 @@ function SessionPicker({ sessions, pinned }: {
 }
 
 /** The monitor application. */
-export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }: AppProps): React.ReactElement {
+export function App({ snapshot, tick, feedRows, mouse, showTreemap, onUnify, onSelect, onToggleTreemap }: AppProps): React.ReactElement {
   const { exit } = useApp()
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const width = process.stdout.columns ?? 100
@@ -286,6 +355,7 @@ export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }: AppP
       onUnify()
       setPickerOpen(false)
     }
+    if (input === 't') onToggleTreemap()
     if (key.upArrow || input === 'k') scrollBy(1)
     if (key.downArrow || input === 'j') scrollBy(-1)
     if (key.pageUp) scrollBy(feedRows)
@@ -321,12 +391,13 @@ export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }: AppP
         </Text>
         <Text color="gray">
           {following
-            ? `q quit · s sessions · ${mouse ? 'wheel' : '↑'} scroll`
+            ? `q quit · s sessions · t ${showTreemap ? 'map off' : 'map'} · ${mouse ? 'wheel' : '↑'} scroll`
             : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live`}
         </Text>
       </Box>
       <MetricsStrip metrics={snapshot.metrics} />
       <ContextGauge metrics={snapshot.metrics} width={width} />
+      {showTreemap ? <ActivityTreemap rows={snapshot.rows} width={width} /> : null}
       <Box flexDirection="column" marginTop={1}>
         {snapshot.error !== undefined
           ? <Text color="red">{snapshot.error}</Text>
