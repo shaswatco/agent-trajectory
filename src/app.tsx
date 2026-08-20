@@ -40,6 +40,12 @@ export interface AppProps {
   onSelect: (path: string) => void
 }
 
+/** Keep a paused viewport on the same top row when the feed grows or resizes. */
+export function adjustedFromEnd(fromEnd: number, previousMaxOffset: number, nextMaxOffset: number): number {
+  if (fromEnd === 0) return 0
+  return Math.min(nextMaxOffset, Math.max(0, fromEnd + nextMaxOffset - previousMaxOffset))
+}
+
 const KIND_COLOR: Record<RowKind, string> = {
   user: 'cyan',
   context: 'gray',
@@ -187,7 +193,7 @@ function SessionPicker({ sessions, pinned }: {
           ? 'now'
           : minutes < 60 ? `${String(minutes)}m` : `${String(Math.round(minutes / 60))}h`
         const marker = entry.path === pinned ? '●' : ' '
-        const where = (entry.title ?? entry.cwd ?? '').slice(-38)
+        const where = [entry.title, entry.cwd].filter((value): value is string => value !== undefined).join(' · ').slice(-38)
         return (
           <Text key={entry.path} wrap="truncate">
             <Text color="gray">{`${marker} ${String(position)} `}</Text>
@@ -218,6 +224,14 @@ export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }: AppP
    * through the feed every time the cap bites.
    */
   const [fromEnd, setFromEnd] = React.useState(0)
+  const previousMaxOffset = React.useRef(maxOffset)
+  React.useEffect(() => {
+    const previous = previousMaxOffset.current
+    if (previous !== maxOffset) {
+      setFromEnd(current => adjustedFromEnd(current, previous, maxOffset))
+      previousMaxOffset.current = maxOffset
+    }
+  }, [maxOffset])
   // Following means pinned to the newest row, which is also the resting state
   // after `G`. Scrolling up leaves it, so arriving rows cannot yank the view.
   const following = fromEnd === 0

@@ -97,6 +97,9 @@ atrajectory --agent claude,codex
 
 # Pin a single session log
 atrajectory --session ~/.claude/projects/-home-me-app/abc123.jsonl
+
+# Get one snapshot for scripts, dashboards, or CI annotations
+atrajectory --json --cwd
 ```
 
 Run it in a second terminal beside your agent and rows appear as work happens.
@@ -125,6 +128,7 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `--interval <ms>` | `1000` | poll interval |
 | `--history <n>` | `5000` | rows kept for scrollback |
 | `--no-mouse` | off | disable wheel scrolling, restoring drag-to-select |
+| `--json` | off | print one snapshot as JSON and exit |
 | `--verbose` | off | include injected-context rows |
 | `--pricing <path>` | see below | model price and capacity table |
 

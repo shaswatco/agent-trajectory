@@ -6,6 +6,8 @@ import test from 'node:test'
 import { claudeAdapter } from '../dist/adapters/claude.js'
 import { codexAdapter } from '../dist/adapters/codex.js'
 import { cachedTrajectory } from '../dist/adapters/util.js'
+import { adjustedFromEnd } from '../dist/app.js'
+import { parseOptions } from '../dist/cli.js'
 import { selectUnifiedSessions, underCwd } from '../dist/registry.js'
 import { mergeMetrics } from '../dist/types.js'
 
@@ -87,4 +89,20 @@ test('cwd filtering accepts a project and descendants but not a shared prefix', 
   assert.equal(underCwd('/work/repo', '/work/repo'), true)
   assert.equal(underCwd('/work/repo/packages/app', '/work/repo'), true)
   assert.equal(underCwd('/work/repository', '/work/repo'), false)
+})
+
+test('a paused scroll position stays on the same top row as new activity arrives', () => {
+  // With 100 rows, a ten-row viewport and a 30-row distance from the bottom,
+  // the visible top row is 60. Ten new rows must not move it.
+  assert.equal(adjustedFromEnd(30, 90, 100), 40)
+  assert.equal(100 - 40, 60)
+  assert.equal(adjustedFromEnd(0, 90, 100), 0)
+})
+
+test('JSON mode is explicit and malformed options fail before starting the monitor', () => {
+  const options = parseOptions(['--json', '--agent', 'codex'])
+  assert.equal(options.json, true)
+  assert.deepEqual(options.harnesses, ['codex'])
+  assert.throws(() => parseOptions(['--merge']), /--merge needs a value/)
+  assert.throws(() => parseOptions(['--unknown']), /unknown option/)
 })

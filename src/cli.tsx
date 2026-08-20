@@ -2,6 +2,8 @@
 /** `atrajectory` entry: poll every agent's session store and render the feed. */
 
 import { render } from 'ink'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import React from 'react'
 import { App } from './app.js'
 import type { Snapshot } from './app.js'
@@ -12,7 +14,7 @@ import { HARNESS_IDS } from './types.js'
 import type { Adapter, HarnessId } from './types.js'
 
 /** Resolved launch parameters; defaulting happens here, never inline. */
-interface Options {
+export interface Options {
   pollIntervalMs: number
   pinned?: string
   harnesses: readonly HarnessId[]
@@ -29,6 +31,8 @@ interface Options {
   historyLimit: number
   /** Report wheel events for scrolling. */
   mouse: boolean
+  /** Print one JSON snapshot and exit instead of opening the terminal UI. */
+  json: boolean
 }
 
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
@@ -52,6 +56,7 @@ Options
   --merge <n>        sessions merged into the unified feed, default 6
   --history <n>      rows kept for scrollback, default 5000
   --no-mouse         disable wheel scrolling, restoring drag-to-select
+  --json             print one JSON snapshot and exit
   --interval <ms>    poll interval, default 1000
   -h, --help         show this help
   -v, --version      show the version
@@ -90,25 +95,33 @@ export function parseOptions(argv: readonly string[]): Options {
   let historyLimit = 5000
   let verbose = false
   let mouse = true
+  let json = false
   let pricingFile: string | undefined
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     const next = argv[index + 1]
     const hasValue = next !== undefined && !next.startsWith('-')
-    if (arg === '--interval' && hasValue) { pollIntervalMs = Number.parseInt(next, 10); index += 1 }
-    else if (arg === '--session' && hasValue) { pinned = next; index += 1 }
-    else if (arg === '--agent' && hasValue) { harnesses = parseAgents(next); index += 1 }
-    else if (arg === '--merge' && hasValue) { mergeLimit = Number.parseInt(next, 10); index += 1 }
-    else if (arg === '--history' && hasValue) { historyLimit = Number.parseInt(next, 10); index += 1 }
+    const required = (name: string): string => {
+      if (!hasValue) throw new Error(`atrajectory: ${name} needs a value`)
+      index += 1
+      return next
+    }
+    if (arg === '--interval') pollIntervalMs = Number.parseInt(required('--interval'), 10)
+    else if (arg === '--session') pinned = required('--session')
+    else if (arg === '--agent') harnesses = parseAgents(required('--agent'))
+    else if (arg === '--merge') mergeLimit = Number.parseInt(required('--merge'), 10)
+    else if (arg === '--history') historyLimit = Number.parseInt(required('--history'), 10)
     else if (arg === '--verbose') verbose = true
     else if (arg === '--no-mouse') mouse = false
-    else if (arg === '--pricing' && hasValue) { pricingFile = next; index += 1 }
+    else if (arg === '--json') json = true
+    else if (arg === '--pricing') pricingFile = required('--pricing')
     else if (arg === '--cwd') {
       // Bare `--cwd` means "here", the common case; a value narrows elsewhere.
       cwd = hasValue ? next : process.cwd()
       if (hasValue) index += 1
     }
+    else throw new Error(`atrajectory: unknown option ${JSON.stringify(arg)}; run atrajectory --help`)
   }
 
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
@@ -127,6 +140,7 @@ export function parseOptions(argv: readonly string[]): Options {
     historyLimit,
     verbose,
     mouse,
+    json,
     pricing: loadPricing(pricingFile),
     ...pinned === undefined ? {} : { pinned },
     ...cwd === undefined ? {} : { cwd },
@@ -231,19 +245,32 @@ function Monitor({ options }: { options: Options }): React.ReactElement {
   })
 }
 
-const argv = process.argv.slice(2)
-
-if (argv.includes('-h') || argv.includes('--help')) {
-  process.stdout.write(`${HELP.trimStart()}\n`)
-} else if (argv.includes('-v') || argv.includes('--version')) {
-  process.stdout.write('0.1.0\n')
-} else {
+/** Run the command line interface when this module is the program entry point. */
+async function main(argv: readonly string[]): Promise<void> {
+  if (argv.includes('-h') || argv.includes('--help')) {
+    process.stdout.write(`${HELP.trimStart()}\n`)
+    return
+  }
+  if (argv.includes('-v') || argv.includes('--version')) {
+    process.stdout.write('0.1.0\n')
+    return
+  }
   try {
     const options = parseOptions(argv)
+    const adapters = allAdapters().filter(adapter => options.harnesses.includes(adapter.id))
+    if (options.json) {
+      process.stdout.write(`${JSON.stringify(snapshot(options, adapters, options.pinned), null, 2)}\n`)
+      return
+    }
     const instance = render(React.createElement(Monitor, { options }))
     await instance.waitUntilExit()
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     process.exitCode = 1
   }
+}
+
+const entry = process.argv[1]
+if (entry !== undefined && import.meta.url === pathToFileURL(resolve(entry)).href) {
+  await main(process.argv.slice(2))
 }

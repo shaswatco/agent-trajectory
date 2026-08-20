@@ -9,6 +9,12 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { Box, Text, useApp, useInput } from 'ink';
 import React from 'react';
 import { HARNESS_LABEL } from './types.js';
+/** Keep a paused viewport on the same top row when the feed grows or resizes. */
+export function adjustedFromEnd(fromEnd, previousMaxOffset, nextMaxOffset) {
+    if (fromEnd === 0)
+        return 0;
+    return Math.min(nextMaxOffset, Math.max(0, fromEnd + nextMaxOffset - previousMaxOffset));
+}
 const KIND_COLOR = {
     user: 'cyan',
     context: 'gray',
@@ -119,7 +125,7 @@ function SessionPicker({ sessions, pinned }) {
                     ? 'now'
                     : minutes < 60 ? `${String(minutes)}m` : `${String(Math.round(minutes / 60))}h`;
                 const marker = entry.path === pinned ? '●' : ' ';
-                const where = (entry.title ?? entry.cwd ?? '').slice(-38);
+                const where = [entry.title, entry.cwd].filter((value) => value !== undefined).join(' · ').slice(-38);
                 return (_jsxs(Text, { wrap: "truncate", children: [_jsx(Text, { color: "gray", children: `${marker} ${String(position)} ` }), _jsx(Text, { color: HARNESS_COLOR[HARNESS_LABEL[entry.harness]] ?? 'gray', children: HARNESS_LABEL[entry.harness].padEnd(7) }), _jsx(Text, { ...entry.path === pinned ? { color: 'green' } : {}, children: `${entry.id.slice(0, 18).padEnd(18)} ${where.padEnd(38)} ${age}` })] }, entry.path));
             })] }));
 }
@@ -136,6 +142,14 @@ export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }) {
      * through the feed every time the cap bites.
      */
     const [fromEnd, setFromEnd] = React.useState(0);
+    const previousMaxOffset = React.useRef(maxOffset);
+    React.useEffect(() => {
+        const previous = previousMaxOffset.current;
+        if (previous !== maxOffset) {
+            setFromEnd(current => adjustedFromEnd(current, previous, maxOffset));
+            previousMaxOffset.current = maxOffset;
+        }
+    }, [maxOffset]);
     // Following means pinned to the newest row, which is also the resting state
     // after `G`. Scrolling up leaves it, so arriving rows cannot yank the view.
     const following = fromEnd === 0;
