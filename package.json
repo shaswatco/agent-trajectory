@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
     "dev": "node --experimental-strip-types src/cli.tsx",
     "start": "node dist/cli.js",
     "prepublishOnly": "npm run build"

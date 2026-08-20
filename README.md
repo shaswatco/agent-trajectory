@@ -251,6 +251,7 @@ Key handling needs a TTY. Piping the output still renders every pane, it just ca
 ```bash
 npm install
 npm run build
+npm test
 node dist/cli.js
 ```
 
