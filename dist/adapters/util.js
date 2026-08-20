@@ -101,6 +101,33 @@ export function readTextPrefix(path, bytes = 131_072) {
 export function jsonlFilesIn(dir) {
     return safeReaddir(dir).filter(name => name.endsWith('.jsonl')).map(name => join(dir, name));
 }
+/** Every JSONL file below `dir`, without following symlinked directories. */
+export function jsonlFilesUnder(dir) {
+    const files = [];
+    const pending = [dir];
+    while (pending.length > 0) {
+        const current = pending.pop();
+        if (current === undefined)
+            continue;
+        let entries;
+        try {
+            entries = readdirSync(current, { withFileTypes: true });
+        }
+        catch {
+            // A log directory can disappear or become unreadable while an agent
+            // rotates sessions. The next poll will discover its replacement.
+            continue;
+        }
+        for (const entry of entries) {
+            const path = join(current, entry.name);
+            if (entry.isDirectory())
+                pending.push(path);
+            else if (entry.isFile() && entry.name.endsWith('.jsonl'))
+                files.push(path);
+        }
+    }
+    return files;
+}
 /** Parse JSONL text into records, skipping lines a writer left torn. */
 export function parseJsonl(text) {
     const records = [];

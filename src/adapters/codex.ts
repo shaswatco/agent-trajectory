@@ -14,7 +14,7 @@
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Adapter, Metrics, Row, Session, Trajectory } from '../types.js'
-import { epochOf, flatten, jsonlFilesIn, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js'
+import { epochOf, flatten, jsonlFilesUnder, modifiedAt, numberAt, readJsonl, readJsonlPrefix, recordAt } from './util.js'
 
 /** Codex home; rollouts live in two directories under it. */
 export function codexHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -162,7 +162,10 @@ export function codexAdapter(roots: readonly string[] = codexRoots()): Adapter {
     discover: () => {
       const sessions: Session[] = []
       for (const root of roots) {
-        for (const path of jsonlFilesIn(root)) {
+        // Current Codex stores live rollouts under sessions/YYYY/MM/DD;
+        // archived sessions remain flat. Searching below both roots supports
+        // both layouts without requiring an agent-version switch.
+        for (const path of jsonlFilesUnder(root)) {
           const name = basename(path, '.jsonl')
           if (!name.startsWith('rollout-')) continue
           const time = modifiedAt(path)
