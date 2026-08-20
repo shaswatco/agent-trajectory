@@ -88,6 +88,9 @@ function MetricsStrip({ metrics }) {
 /** Context gauge. */
 function ContextGauge({ metrics, width }) {
     const { contextTokens, contextWindow } = metrics;
+    if (metrics.contextMixed === true) {
+        return _jsx(Text, { color: "gray", children: "ctx \u2014 \u00B7 mixed sessions; select one for a context gauge" });
+    }
     if (contextTokens === undefined || contextWindow === undefined) {
         return (_jsx(Text, { color: "gray", wrap: "truncate", children: `ctx — · ${tokens(contextTokens)} occupied, no window reported` }));
     }

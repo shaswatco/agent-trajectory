@@ -122,6 +122,9 @@ function MetricsStrip({ metrics }: { metrics: Metrics }): React.ReactElement {
 /** Context gauge. */
 function ContextGauge({ metrics, width }: { metrics: Metrics; width: number }): React.ReactElement {
   const { contextTokens, contextWindow } = metrics
+  if (metrics.contextMixed === true) {
+    return <Text color="gray">ctx — · mixed sessions; select one for a context gauge</Text>
+  }
   if (contextTokens === undefined || contextWindow === undefined) {
     return (
       <Text color="gray" wrap="truncate">

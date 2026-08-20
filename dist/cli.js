@@ -4,7 +4,7 @@ import { render } from 'ink';
 import React from 'react';
 import { App } from './app.js';
 import { loadPricing, pricingPath } from './models.js';
-import { allAdapters, discoverAll, mergeSessions, readTagged, underCwd } from './registry.js';
+import { allAdapters, discoverAll, mergeSessions, readTagged, selectUnifiedSessions, underCwd } from './registry.js';
 import { HARNESS_IDS } from './types.js';
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
 const CHROME_ROWS = 6;
@@ -167,7 +167,7 @@ export function snapshot(options, adapters, pinned) {
             rows: trajectory.rows.slice(-options.historyLimit),
         };
     }
-    const merged = mergeSessions(discovered.slice(0, options.mergeLimit), options.historyLimit, { verbose: options.verbose, pricing: options.pricing });
+    const merged = mergeSessions(selectUnifiedSessions(discovered, options.mergeLimit), options.historyLimit, { verbose: options.verbose, pricing: options.pricing });
     return { sessions, unified: true, metrics: merged.metrics, rows: merged.rows };
 }
 /** Root component owning the poll loop and the pinned selection. */

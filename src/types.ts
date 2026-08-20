@@ -82,6 +82,8 @@ export interface Metrics {
   contextWindow?: number | undefined
   /** Best estimate of currently occupied context. */
   contextTokens?: number | undefined
+  /** Context figures came from more than one session and cannot form one ratio. */
+  contextMixed?: boolean | undefined
   /** Cache-write tokens, kept separate because they are priced differently. */
   cacheWriteTokens?: number | undefined
   /** Model id the session last used, as the agent recorded it. */
@@ -122,11 +124,6 @@ export function mergeMetrics(parts: readonly Metrics[]): Metrics {
     const values = defined(pick)
     return values.length === 0 ? undefined : values.reduce((total, value) => total + value, 0) / values.length
   }
-  const max = (pick: (m: Metrics) => number | undefined): number | undefined => {
-    const values = defined(pick)
-    return values.length === 0 ? undefined : Math.max(...values)
-  }
-
   const inputTokens = sum(m => m.inputTokens)
   const cacheReadTokens = sum(m => m.cacheReadTokens)
   const prompt = (inputTokens ?? 0) + (cacheReadTokens ?? 0)
@@ -144,10 +141,21 @@ export function mergeMetrics(parts: readonly Metrics[]): Metrics {
     outputTokens: sum(m => m.outputTokens),
     cacheReadTokens,
     cacheHitRatio: prompt > 0 && cacheReadTokens !== undefined ? cacheReadTokens / prompt : undefined,
-    // Capacity does not add across models; the largest in view is the only
-    // honest single number.
-    contextWindow: max(m => m.contextWindow),
-    contextTokens: max(m => m.contextTokens),
+    // A context window and its occupancy are a pair from one request. Taking
+    // their maxima independently can combine different sessions and turn an
+    // almost-full 100K context plus an unrelated 1M window into a harmless
+    // looking 10% gauge. Preserve one pair only; otherwise say it is mixed.
+    ...(() => {
+      const contexts = parts.filter((metrics): metrics is Metrics & {
+        contextWindow: number
+        contextTokens: number
+      } => metrics.contextWindow !== undefined && metrics.contextTokens !== undefined)
+      if (contexts.length === 1) {
+        const context = contexts[0]!
+        return { contextWindow: context.contextWindow, contextTokens: context.contextTokens }
+      }
+      return contexts.length > 1 ? { contextMixed: true } : {}
+    })(),
     cacheWriteTokens: sum(m => m.cacheWriteTokens),
     // Several models in one view have no single id; cost still adds up.
     model: (() => {

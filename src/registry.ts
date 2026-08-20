@@ -30,6 +30,34 @@ export function discoverAll(adapters: readonly Adapter[]): Discovered[] {
 }
 
 /**
+ * Sessions to include in the unified feed.
+ *
+ * The feed promises to show several agent harnesses. Selecting the first N
+ * global mtimes breaks that promise whenever a background agent writes more
+ * frequently than the rest, so every active harness receives one slot before
+ * the remaining slots fill by recency.
+ */
+export function selectUnifiedSessions(entries: readonly Discovered[], limit: number): Discovered[] {
+  if (limit <= 0) return []
+  const selected: Discovered[] = []
+  const seen = new Set<HarnessId>()
+  for (const entry of entries) {
+    if (selected.length >= limit) break
+    if (seen.has(entry.session.harness)) continue
+    selected.push(entry)
+    seen.add(entry.session.harness)
+  }
+  if (selected.length >= limit) return selected
+  const chosen = new Set(selected.map(entry => entry.session.path))
+  for (const entry of entries) {
+    if (selected.length >= limit) break
+    if (chosen.has(entry.session.path)) continue
+    selected.push(entry)
+  }
+  return selected
+}
+
+/**
  * Collapse runs of identical rows.
  *
  * A stuck agent retrying, or a loop re-reading one file, otherwise fills the

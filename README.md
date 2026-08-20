@@ -156,7 +156,9 @@ provider prefixes and deployment suffixes, so `z-ai/glm-4.5-air:free`,
 
 ## 🔍 Reading the Screen
 
-The top line names the view and counts sessions per agent. Below it, the metrics strip, then the context gauge — green under 70%, yellow past that, red past 90%.
+The top line names the view and counts sessions per agent. Unified mode takes the newest session from every active agent first, then fills remaining `--merge` slots by recency, so a busy background Claude session cannot hide Codex, DeepSeek, or Hermes activity.
+
+Below it, the metrics strip, then the context gauge — green under 70%, yellow past that, red past 90%. A context gauge always belongs to one request; when the feed combines several sessions it shows `mixed sessions; select one` rather than pairing an occupancy value from one session with a window from another.
 
 Each feed row is one event:
 

@@ -7,7 +7,7 @@ import { App } from './app.js'
 import type { Snapshot } from './app.js'
 import { loadPricing, pricingPath } from './models.js'
 import type { PricingTable } from './models.js'
-import { allAdapters, discoverAll, mergeSessions, readTagged, underCwd } from './registry.js'
+import { allAdapters, discoverAll, mergeSessions, readTagged, selectUnifiedSessions, underCwd } from './registry.js'
 import { HARNESS_IDS } from './types.js'
 import type { Adapter, HarnessId } from './types.js'
 
@@ -185,7 +185,7 @@ export function snapshot(
   }
 
   const merged = mergeSessions(
-    discovered.slice(0, options.mergeLimit),
+    selectUnifiedSessions(discovered, options.mergeLimit),
     options.historyLimit,
     { verbose: options.verbose, pricing: options.pricing },
   )

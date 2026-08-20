@@ -27,10 +27,6 @@ export function mergeMetrics(parts) {
         const values = defined(pick);
         return values.length === 0 ? undefined : values.reduce((total, value) => total + value, 0) / values.length;
     };
-    const max = (pick) => {
-        const values = defined(pick);
-        return values.length === 0 ? undefined : Math.max(...values);
-    };
     const inputTokens = sum(m => m.inputTokens);
     const cacheReadTokens = sum(m => m.cacheReadTokens);
     const prompt = (inputTokens ?? 0) + (cacheReadTokens ?? 0);
@@ -47,10 +43,18 @@ export function mergeMetrics(parts) {
         outputTokens: sum(m => m.outputTokens),
         cacheReadTokens,
         cacheHitRatio: prompt > 0 && cacheReadTokens !== undefined ? cacheReadTokens / prompt : undefined,
-        // Capacity does not add across models; the largest in view is the only
-        // honest single number.
-        contextWindow: max(m => m.contextWindow),
-        contextTokens: max(m => m.contextTokens),
+        // A context window and its occupancy are a pair from one request. Taking
+        // their maxima independently can combine different sessions and turn an
+        // almost-full 100K context plus an unrelated 1M window into a harmless
+        // looking 10% gauge. Preserve one pair only; otherwise say it is mixed.
+        ...(() => {
+            const contexts = parts.filter((metrics) => metrics.contextWindow !== undefined && metrics.contextTokens !== undefined);
+            if (contexts.length === 1) {
+                const context = contexts[0];
+                return { contextWindow: context.contextWindow, contextTokens: context.contextTokens };
+            }
+            return contexts.length > 1 ? { contextMixed: true } : {};
+        })(),
         cacheWriteTokens: sum(m => m.cacheWriteTokens),
         // Several models in one view have no single id; cost still adds up.
         model: (() => {
