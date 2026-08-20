@@ -108,6 +108,7 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `s` | toggle the session picker |
 | `u` | return to the unified feed |
 | `0`–`9` | jump to that session |
+| wheel | scroll three rows |
 | `↑` `↓` / `k` `j` | scroll one row |
 | `PgUp` `PgDn` | scroll one page |
 | `g` / `G` | jump to oldest / newest |
@@ -122,6 +123,7 @@ Run it in a second terminal beside your agent and rows appear as work happens.
 | `--merge <n>` | `6` | sessions merged into the unified feed |
 | `--interval <ms>` | `1000` | poll interval |
 | `--history <n>` | `5000` | rows kept for scrollback |
+| `--no-mouse` | off | disable wheel scrolling, restoring drag-to-select |
 | `--verbose` | off | include injected-context rows |
 | `--pricing <path>` | see below | model price and capacity table |
 
@@ -174,11 +176,17 @@ The `›` versus `⋯` split is the one worth internalising: it separates what y
 
 ### Scrolling
 
-The feed follows the newest row until you scroll away from it. While scrolled
+Scroll with the wheel, the arrow keys, or `j`/`k`. The feed follows the newest
+row until you scroll away from it. While scrolled
 back the header shows `PAUSED 4275-4292/4310` and arriving rows no longer move
 the view, so reading history is not interrupted by a working agent. `G` returns
 to following. Scrollback holds `--history` rows, independent of the terminal
 height.
+
+Wheel support turns on xterm mouse reporting, which in most terminals takes
+over drag-to-select. Hold <kbd>Shift</kbd> (or <kbd>Option</kbd> on macOS
+Terminal) to select text anyway, or run with `--no-mouse`. Quit is `q` or
+Ctrl+C — Escape is not bound, because a mouse report begins with one.
 
 ## 🤖 Agent Coverage
 

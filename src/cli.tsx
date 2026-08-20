@@ -27,6 +27,8 @@ interface Options {
    * unrecoverable, which is the whole point of keeping a trajectory.
    */
   historyLimit: number
+  /** Report wheel events for scrolling. */
+  mouse: boolean
 }
 
 /** Rows reserved for the header, metrics strip, gauge and spacing. */
@@ -49,13 +51,14 @@ Options
   --session <path>   pin one session instead of the unified feed
   --merge <n>        sessions merged into the unified feed, default 6
   --history <n>      rows kept for scrollback, default 5000
+  --no-mouse         disable wheel scrolling, restoring drag-to-select
   --interval <ms>    poll interval, default 1000
   -h, --help         show this help
   -v, --version      show the version
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
-  ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume following)
+  wheel or ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume live)
 
 Costs need a price table; free-tier models are recognised automatically and
 everything else shows $— until you write one. See the README.
@@ -86,6 +89,7 @@ export function parseOptions(argv: readonly string[]): Options {
   let mergeLimit = 6
   let historyLimit = 5000
   let verbose = false
+  let mouse = true
   let pricingFile: string | undefined
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -98,6 +102,7 @@ export function parseOptions(argv: readonly string[]): Options {
     else if (arg === '--merge' && hasValue) { mergeLimit = Number.parseInt(next, 10); index += 1 }
     else if (arg === '--history' && hasValue) { historyLimit = Number.parseInt(next, 10); index += 1 }
     else if (arg === '--verbose') verbose = true
+    else if (arg === '--no-mouse') mouse = false
     else if (arg === '--pricing' && hasValue) { pricingFile = next; index += 1 }
     else if (arg === '--cwd') {
       // Bare `--cwd` means "here", the common case; a value narrows elsewhere.
@@ -121,6 +126,7 @@ export function parseOptions(argv: readonly string[]): Options {
     mergeLimit,
     historyLimit,
     verbose,
+    mouse,
     pricing: loadPricing(pricingFile),
     ...pinned === undefined ? {} : { pinned },
     ...cwd === undefined ? {} : { cwd },
@@ -219,6 +225,7 @@ function Monitor({ options }: { options: Options }): React.ReactElement {
     snapshot: view,
     tick,
     feedRows: Math.max(4, rows - CHROME_ROWS),
+    mouse: options.mouse,
     onUnify: () => { setPinned(undefined) },
     onSelect: (path: string) => { setPinned(path) },
   })

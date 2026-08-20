@@ -25,13 +25,14 @@ Options
   --session <path>   pin one session instead of the unified feed
   --merge <n>        sessions merged into the unified feed, default 6
   --history <n>      rows kept for scrollback, default 5000
+  --no-mouse         disable wheel scrolling, restoring drag-to-select
   --interval <ms>    poll interval, default 1000
   -h, --help         show this help
   -v, --version      show the version
 
 Keys
   q quit · s session picker · u unified view · 0-9 select a session
-  ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume following)
+  wheel or ↑/↓ or j/k scroll · PgUp/PgDn page · g top · G bottom (resume live)
 
 Costs need a price table; free-tier models are recognised automatically and
 everything else shows $— until you write one. See the README.
@@ -61,6 +62,7 @@ export function parseOptions(argv) {
     let mergeLimit = 6;
     let historyLimit = 5000;
     let verbose = false;
+    let mouse = true;
     let pricingFile;
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
@@ -88,6 +90,8 @@ export function parseOptions(argv) {
         }
         else if (arg === '--verbose')
             verbose = true;
+        else if (arg === '--no-mouse')
+            mouse = false;
         else if (arg === '--pricing' && hasValue) {
             pricingFile = next;
             index += 1;
@@ -114,6 +118,7 @@ export function parseOptions(argv) {
         mergeLimit,
         historyLimit,
         verbose,
+        mouse,
         pricing: loadPricing(pricingFile),
         ...pinned === undefined ? {} : { pinned },
         ...cwd === undefined ? {} : { cwd },
@@ -192,6 +197,7 @@ function Monitor({ options }) {
         snapshot: view,
         tick,
         feedRows: Math.max(4, rows - CHROME_ROWS),
+        mouse: options.mouse,
         onUnify: () => { setPinned(undefined); },
         onSelect: (path) => { setPinned(path); },
     });

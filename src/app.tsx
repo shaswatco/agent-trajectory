@@ -34,6 +34,8 @@ export interface AppProps {
   tick: number
   /** Rows the feed may occupy, from the current terminal height. */
   feedRows: number
+  /** Report wheel events for scrolling; disabling restores drag-to-select. */
+  mouse: boolean
   onUnify: () => void
   onSelect: (path: string) => void
 }
@@ -200,7 +202,7 @@ function SessionPicker({ sessions, pinned }: {
 }
 
 /** The monitor application. */
-export function App({ snapshot, tick, feedRows, onUnify, onSelect }: AppProps): React.ReactElement {
+export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }: AppProps): React.ReactElement {
   const { exit } = useApp()
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const width = process.stdout.columns ?? 100
@@ -227,8 +229,41 @@ export function App({ snapshot, tick, feedRows, onUnify, onSelect }: AppProps): 
   // still renders every pane; it just cannot be driven.
   const interactive = process.stdin.isTTY === true
 
+  /**
+   * Wheel scrolling via xterm SGR mouse reporting.
+   *
+   * This is handled on raw stdin rather than through `useInput`, because Ink
+   * parses a mouse report's leading ESC as the escape key — quitting on every
+   * scroll if quit were bound to it. Quit is therefore `q` or Ctrl+C only.
+   */
+  React.useEffect(() => {
+    if (!interactive || !mouse) return
+    const { stdin, stdout } = process
+    // 1000 enables button reporting, 1006 asks for SGR coordinates so columns
+    // beyond 223 still encode correctly on wide terminals.
+    stdout.write('\u001B[?1000h\u001B[?1006h')
+    const restore = (): void => { stdout.write('\u001B[?1006l\u001B[?1000l') }
+    const onData = (chunk: Buffer | string): void => {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+      for (const match of text.matchAll(/\u001B\[<(\d+);\d+;\d+[Mm]/g)) {
+        const button = Number.parseInt(match[1] ?? '', 10)
+        if (button === 64) scrollBy(3)
+        else if (button === 65) scrollBy(-3)
+      }
+    }
+    stdin.on('data', onData)
+    // A crash or signal skips React cleanup and would leave the terminal
+    // reporting every mouse move to the shell.
+    process.once('exit', restore)
+    return () => {
+      stdin.off('data', onData)
+      process.off('exit', restore)
+      restore()
+    }
+  }, [interactive, mouse, maxOffset])
+
   useInput((input, key) => {
-    if (input === 'q' || key.escape) exit()
+    if (input === 'q') exit()
     if (input === 's') setPickerOpen(open => !open)
     if (input === 'u') {
       onUnify()
@@ -269,7 +304,7 @@ export function App({ snapshot, tick, feedRows, onUnify, onSelect }: AppProps): 
         </Text>
         <Text color="gray">
           {following
-            ? 'q quit · s sessions · ↑ scroll'
+            ? `q quit · s sessions · ${mouse ? 'wheel' : '↑'} scroll`
             : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live`}
         </Text>
       </Box>

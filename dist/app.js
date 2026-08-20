@@ -121,7 +121,7 @@ function SessionPicker({ sessions, pinned }) {
             })] }));
 }
 /** The monitor application. */
-export function App({ snapshot, tick, feedRows, onUnify, onSelect }) {
+export function App({ snapshot, tick, feedRows, mouse, onUnify, onSelect }) {
     const { exit } = useApp();
     const [pickerOpen, setPickerOpen] = React.useState(false);
     const width = process.stdout.columns ?? 100;
@@ -144,8 +144,43 @@ export function App({ snapshot, tick, feedRows, onUnify, onSelect }) {
     // Key handling needs raw mode, which only a TTY stdin offers. Piped output
     // still renders every pane; it just cannot be driven.
     const interactive = process.stdin.isTTY === true;
+    /**
+     * Wheel scrolling via xterm SGR mouse reporting.
+     *
+     * This is handled on raw stdin rather than through `useInput`, because Ink
+     * parses a mouse report's leading ESC as the escape key — quitting on every
+     * scroll if quit were bound to it. Quit is therefore `q` or Ctrl+C only.
+     */
+    React.useEffect(() => {
+        if (!interactive || !mouse)
+            return;
+        const { stdin, stdout } = process;
+        // 1000 enables button reporting, 1006 asks for SGR coordinates so columns
+        // beyond 223 still encode correctly on wide terminals.
+        stdout.write('\u001B[?1000h\u001B[?1006h');
+        const restore = () => { stdout.write('\u001B[?1006l\u001B[?1000l'); };
+        const onData = (chunk) => {
+            const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+            for (const match of text.matchAll(/\u001B\[<(\d+);\d+;\d+[Mm]/g)) {
+                const button = Number.parseInt(match[1] ?? '', 10);
+                if (button === 64)
+                    scrollBy(3);
+                else if (button === 65)
+                    scrollBy(-3);
+            }
+        };
+        stdin.on('data', onData);
+        // A crash or signal skips React cleanup and would leave the terminal
+        // reporting every mouse move to the shell.
+        process.once('exit', restore);
+        return () => {
+            stdin.off('data', onData);
+            process.off('exit', restore);
+            restore();
+        };
+    }, [interactive, mouse, maxOffset]);
     useInput((input, key) => {
-        if (input === 'q' || key.escape)
+        if (input === 'q')
             exit();
         if (input === 's')
             setPickerOpen(open => !open);
@@ -184,7 +219,7 @@ export function App({ snapshot, tick, feedRows, onUnify, onSelect }) {
     }
     const sources = [...counts].map(([label, total]) => `${label} ${String(total)}`).join(' · ');
     return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsxs(Text, { bold: true, color: "magenta", wrap: "truncate", children: [_jsx(Text, { color: "green", children: `${HEARTBEAT[tick % HEARTBEAT.length] ?? '·'} ` }), snapshot.unified ? `agent trajectory · ${sources}` : snapshot.title ?? 'agent trajectory'] }), _jsx(Text, { color: "gray", children: following
-                            ? 'q quit · s sessions · ↑ scroll'
+                            ? `q quit · s sessions · ${mouse ? 'wheel' : '↑'} scroll`
                             : `PAUSED ${String(offset + 1)}-${String(Math.min(total, offset + feedRows))}/${String(total)} · G live` })] }), _jsx(MetricsStrip, { metrics: snapshot.metrics }), _jsx(ContextGauge, { metrics: snapshot.metrics, width: width }), _jsx(Box, { flexDirection: "column", marginTop: 1, children: snapshot.error !== undefined
                     ? _jsx(Text, { color: "red", children: snapshot.error })
                     : snapshot.rows.length === 0
