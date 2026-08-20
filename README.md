@@ -156,6 +156,7 @@ provider prefixes and deployment suffixes, so `z-ai/glm-4.5-air:free`,
 
 - **Free tiers cost nothing**, and ids ending `-free` or `:free` are detected without configuration.
 - **An unpriced model shows `$—`**, never `$0.00`.
+- **A session that switches priced models shows `$—`** until the agents expose per-request model usage; pricing a combined token total at the last model's rate would be false precision.
 - **`contextWindow` is only needed for Claude Code.** Codex and DeepSeek Harness log their own, and a logged value always wins.
 - **A window your usage exceeds is discarded**, not clamped — a bar pinned at 100% because the configured capacity is wrong reads exactly like a context about to overflow, which is the one thing the gauge exists to warn about.
 

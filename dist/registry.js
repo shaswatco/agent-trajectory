@@ -82,7 +82,12 @@ export function collapseRepeats(rows) {
  * to warn about.
  */
 function enrich(metrics, pricing) {
-    const cost = costOf(metrics.model, metrics, pricing);
+    // A session-wide token total cannot be priced at the last model's rate when
+    // it switched models. Until every source provides a per-request model usage
+    // split, an absent cost is more truthful than a plausible wrong dollar value.
+    const cost = metrics.models !== undefined && metrics.models.length > 1
+        ? undefined
+        : costOf(metrics.model, metrics, pricing);
     const configured = metrics.contextWindow ?? contextWindowFor(metrics.model, pricing);
     const occupied = metrics.contextTokens;
     const window = configured !== undefined && occupied !== undefined && occupied > configured

@@ -88,6 +88,8 @@ export interface Metrics {
   cacheWriteTokens?: number | undefined
   /** Model id the session last used, as the agent recorded it. */
   model?: string | undefined
+  /** Distinct model ids when a session switched models while recording usage. */
+  models?: readonly string[] | undefined
   /** Cost in USD, absent when the model has no configured price. */
   costUsd?: number | undefined
 }
@@ -159,7 +161,7 @@ export function mergeMetrics(parts: readonly Metrics[]): Metrics {
     cacheWriteTokens: sum(m => m.cacheWriteTokens),
     // Several models in one view have no single id; cost still adds up.
     model: (() => {
-      const ids = [...new Set(parts.map(m => m.model).filter((v): v is string => v !== undefined))]
+      const ids = [...new Set(parts.flatMap(metrics => metrics.models ?? (metrics.model === undefined ? [] : [metrics.model])))]
       return ids.length === 1 ? ids[0] : ids.length === 0 ? undefined : `${String(ids.length)} models`
     })(),
     costUsd: sum(m => m.costUsd),

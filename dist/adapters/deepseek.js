@@ -93,6 +93,7 @@ function foldLog(records) {
     let contextWindow;
     let contextTokens;
     let model;
+    const models = new Set();
     let stepStart;
     let firstToken;
     const push = (row) => {
@@ -213,8 +214,10 @@ function foldLog(records) {
             case 'request/header': {
                 const selection = recordAt(data, 'model') ?? data;
                 const named = selection?.['model'] ?? selection?.['id'];
-                if (typeof named === 'string')
+                if (typeof named === 'string') {
                     model = named;
+                    models.add(named);
+                }
                 break;
             }
             default:
@@ -236,6 +239,7 @@ function foldLog(records) {
         ...contextTokens === undefined ? {} : { contextTokens },
         ...sawUsage ? { cacheWriteTokens: cacheWrite } : {},
         ...model === undefined ? {} : { model },
+        ...models.size > 1 ? { models: [...models] } : {},
     };
     return { metrics, rows };
 }

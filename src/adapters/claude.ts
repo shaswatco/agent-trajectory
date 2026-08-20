@@ -62,6 +62,7 @@ function foldTranscript(records: readonly Record<string, unknown>[]): Trajectory
   let steps = 0
   let lastPrompt: number | undefined
   let model: string | undefined
+  const models = new Set<string>()
 
   const push = (row: Omit<Row, 'index'>): void => {
     index += 1
@@ -101,7 +102,10 @@ function foldTranscript(records: readonly Record<string, unknown>[]): Trajectory
       // inflates the step count, and rendering them as assistant text makes a
       // failed request read like something Claude said.
       const synthetic = typeof declared === 'string' && !isRealModel(declared)
-      if (typeof declared === 'string' && !synthetic) model = declared
+      if (typeof declared === 'string' && !synthetic) {
+        model = declared
+        models.add(declared)
+      }
       if (!synthetic) steps += 1
       const usage = usageOf(message)
       if (usage !== undefined) {
@@ -156,6 +160,7 @@ function foldTranscript(records: readonly Record<string, unknown>[]): Trajectory
     ...prompt > 0 ? { cacheHitRatio: cacheRead / prompt } : {},
     ...lastPrompt === undefined ? {} : { contextTokens: lastPrompt },
     ...model === undefined ? {} : { model },
+    ...models.size > 1 ? { models: [...models] } : {},
   }
   return { metrics, rows }
 }

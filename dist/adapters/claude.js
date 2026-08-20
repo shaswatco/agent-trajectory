@@ -49,6 +49,7 @@ function foldTranscript(records) {
     let steps = 0;
     let lastPrompt;
     let model;
+    const models = new Set();
     const push = (row) => {
         index += 1;
         rows.push({ ...row, index });
@@ -85,8 +86,10 @@ function foldTranscript(records) {
             // inflates the step count, and rendering them as assistant text makes a
             // failed request read like something Claude said.
             const synthetic = typeof declared === 'string' && !isRealModel(declared);
-            if (typeof declared === 'string' && !synthetic)
+            if (typeof declared === 'string' && !synthetic) {
                 model = declared;
+                models.add(declared);
+            }
             if (!synthetic)
                 steps += 1;
             const usage = usageOf(message);
@@ -143,6 +146,7 @@ function foldTranscript(records) {
         ...prompt > 0 ? { cacheHitRatio: cacheRead / prompt } : {},
         ...lastPrompt === undefined ? {} : { contextTokens: lastPrompt },
         ...model === undefined ? {} : { model },
+        ...models.size > 1 ? { models: [...models] } : {},
     };
     return { metrics, rows };
 }

@@ -8,7 +8,7 @@ import { codexAdapter } from '../dist/adapters/codex.js'
 import { cachedTrajectory } from '../dist/adapters/util.js'
 import { adjustedFromEnd } from '../dist/app.js'
 import { parseOptions } from '../dist/cli.js'
-import { selectUnifiedSessions, underCwd } from '../dist/registry.js'
+import { readTagged, selectUnifiedSessions, underCwd } from '../dist/registry.js'
 import { mergeMetrics } from '../dist/types.js'
 
 /** Run a test in an isolated temporary agent home. */
@@ -105,4 +105,25 @@ test('JSON mode is explicit and malformed options fail before starting the monit
   assert.deepEqual(options.harnesses, ['codex'])
   assert.throws(() => parseOptions(['--merge']), /--merge needs a value/)
   assert.throws(() => parseOptions(['--unknown']), /unknown option/)
+})
+
+test('a session that switches models with aggregated usage does not report a false cost', () => {
+  const entry = {
+    session: { harness: 'claude', id: 'switch', path: '/logs/switch', modifiedAt: 1 },
+    adapter: {
+      read: () => ({
+        metrics: {
+          model: 'model-b',
+          models: ['model-a', 'model-b'],
+          inputTokens: 1_000_000,
+        },
+        rows: [],
+      }),
+    },
+  }
+  const trajectory = readTagged(entry, {
+    verbose: false,
+    pricing: { 'model-a': { input: 1 }, 'model-b': { input: 10 } },
+  })
+  assert.equal(trajectory.metrics.costUsd, undefined)
 })

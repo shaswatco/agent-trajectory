@@ -38,6 +38,7 @@ function foldRollout(records) {
     let index = 0;
     let cwd;
     let model;
+    const models = new Set();
     let turns = 0;
     let steps = 0;
     let llmMs = 0;
@@ -61,8 +62,10 @@ function foldRollout(records) {
         if (family === 'session_meta' || family === 'turn_context') {
             if (typeof payload['cwd'] === 'string')
                 cwd = payload['cwd'];
-            if (typeof payload['model'] === 'string')
+            if (typeof payload['model'] === 'string') {
                 model = payload['model'];
+                models.add(model);
+            }
             continue;
         }
         if (family !== 'event_msg')
@@ -141,6 +144,7 @@ function foldRollout(records) {
         ...contextWindow === undefined ? {} : { contextWindow },
         ...contextTokens === undefined ? {} : { contextTokens },
         ...model === undefined ? {} : { model },
+        ...models.size > 1 ? { models: [...models] } : {},
     };
     return { metrics, rows, ...cwd === undefined ? {} : { cwd } };
 }

@@ -96,6 +96,7 @@ function foldLog(records: readonly Record<string, unknown>[]): Trajectory {
   let contextWindow: number | undefined
   let contextTokens: number | undefined
   let model: string | undefined
+  const models = new Set<string>()
 
   let stepStart: number | undefined
   let firstToken: number | undefined
@@ -216,7 +217,10 @@ function foldLog(records: readonly Record<string, unknown>[]): Trajectory {
       case 'request/header': {
         const selection = recordAt(data, 'model') ?? data
         const named = selection?.['model'] ?? selection?.['id']
-        if (typeof named === 'string') model = named
+        if (typeof named === 'string') {
+          model = named
+          models.add(named)
+        }
         break
       }
       default:
@@ -239,6 +243,7 @@ function foldLog(records: readonly Record<string, unknown>[]): Trajectory {
     ...contextTokens === undefined ? {} : { contextTokens },
     ...sawUsage ? { cacheWriteTokens: cacheWrite } : {},
     ...model === undefined ? {} : { model },
+    ...models.size > 1 ? { models: [...models] } : {},
   }
   return { metrics, rows }
 }
